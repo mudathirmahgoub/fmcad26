@@ -5,8 +5,8 @@ downloads all tools, builds them, runs every experiment, and produces
 `comparison.csv` plus the paper plots:
 
 ```bash
-git clone https://github.com/mudathirmahgoub/fmcad.git
-cd fmcad
+git clone https://github.com/mudathirmahgoub/fmcad26.git
+cd fmcad26
 ./run.sh
 ```
 
