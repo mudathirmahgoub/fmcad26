@@ -24,7 +24,7 @@ Linux or macOS with:
 | git, bash | |
 | python3 ≥ 3.9 with `venv` | Debian/Ubuntu: `sudo apt install python3-venv python3-dev` |
 | C++ compiler, `cmake`, `ninja` | Debian/Ubuntu: `sudo apt install build-essential cmake ninja-build`; macOS: Xcode CLT + `brew install cmake ninja` |
-| JDK 21+ (`java` on PATH) | for the SQLSolver gradle build |
+| JDK 17+ (`java` on PATH) | for the SQLSolver gradle build; Debian/Ubuntu: `sudo apt install openjdk-21-jdk` |
 | ~4 GB disk, internet access | cvc5 `--auto-download` fetches its own dependencies |
 
 ## What setup.sh does
@@ -143,5 +143,9 @@ returns `unknown` there, which is the point of the modification.
 - `UnsatisfiedLinkError` from the SQLSolver tests on Linux: re-run
   `./setup.sh` so the freshly built cvc5 java bindings are copied into
   `SQLSolver/lib/` (step 4).
+- `error: invalid source release: N` from gradle: your JDK is older than
+  the level SQLSolver targets (17) — install a newer JDK. Re-running
+  `./run.sh` also fast-forwards the existing clones, so upstream build
+  fixes arrive automatically.
 - gradle "up-to-date" confusion never affects results: the orchestrator
   passes `--rerun-tasks` so tests always execute.

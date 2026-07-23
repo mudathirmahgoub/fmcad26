@@ -7,7 +7,7 @@
 # completed steps are skipped.
 #
 # Requirements (see README.md): git, python3 (>= 3.9, with venv), a C++
-# compiler, cmake, ninja, JDK 21+.
+# compiler, cmake, ninja, JDK 17+.
 
 set -euo pipefail
 cd "$(cd "$(dirname "$0")" && pwd)"
@@ -15,14 +15,44 @@ cd "$(cd "$(dirname "$0")" && pwd)"
 step() { printf '\n=== %s ===\n' "$*"; }
 
 # --------------------------------------------------------------------------
-# 1. Clone the tool repositories (skipped when the directory already exists)
+# 0. Fail fast on missing prerequisites (before the long cvc5 build)
+# --------------------------------------------------------------------------
+step "Checking prerequisites"
+for tool in git python3 cmake ninja java; do
+    command -v "$tool" >/dev/null || {
+        echo "error: '$tool' not found on PATH -- see README.md" >&2
+        exit 1
+    }
+done
+java_major=$(java -version 2>&1 | sed -n 's/.*version "\([0-9]*\).*/\1/p' | head -1)
+if [ "${java_major:-0}" -lt 17 ]; then
+    echo "error: JDK 17 or newer is required for SQLSolver," >&2
+    echo "       found java ${java_major:-unknown}" >&2
+    echo "  Debian/Ubuntu: sudo apt install openjdk-21-jdk" >&2
+    echo "  macOS:         brew install openjdk" >&2
+    exit 1
+fi
+echo "git, python3, cmake, ninja, java $java_major: OK"
+
+# --------------------------------------------------------------------------
+# 1. Clone the tool repositories (existing clones are fast-forwarded so
+#    upstream fixes arrive on re-runs)
 # --------------------------------------------------------------------------
 step "Cloning repositories"
-[ -d sls-reachability ] || git clone --branch cvc5 \
+clone_or_update() {
+    local dir=$1 branch=$2 url=$3
+    if [ -d "$dir" ]; then
+        git -C "$dir" pull --ff-only ||
+            echo "warning: could not fast-forward $dir; leaving it as-is"
+    else
+        git clone --branch "$branch" "$url"
+    fi
+}
+clone_or_update sls-reachability cvc5 \
     https://github.com/mudathirmahgoub/sls-reachability.git
-[ -d SQLSolver ] || git clone --branch cvc5 \
+clone_or_update SQLSolver cvc5 \
     https://github.com/mudathirmahgoub/SQLSolver.git
-[ -d cvc5 ] || git clone --branch liastar \
+clone_or_update cvc5 liastar \
     https://github.com/mudathirmahgoub/cvc5.git
 
 # --------------------------------------------------------------------------
