@@ -26,7 +26,7 @@ Linux, macOS or Windows with:
 | C++ compiler, `cmake`, `ninja` | Debian/Ubuntu: `sudo apt install build-essential cmake ninja-build`; macOS: Xcode CLT + `brew install cmake ninja` |
 | JDK 21+ (`java` on PATH) | for the SQLSolver gradle build; Debian/Ubuntu: `sudo apt install openjdk-21-jdk` (then `sudo update-alternatives --config java` if an older JDK is the default) |
 | ~4 GB disk, internet access | cvc5 `--auto-download` fetches its own dependencies |
-| Windows only: MSYS2 | run everything inside an MSYS2 shell (e.g. clang64) so `bash`, `cmake`, `ninja` and a clang toolchain are available for the cvc5 build: `pacman -S git mingw-w64-clang-x86_64-{clang,cmake,ninja,python}`; the JDK can be a native Windows one ([adoptium.net](https://adoptium.net)) |
+| Windows only: MSYS2 | run everything inside the MSYS2 shell matching your CPU — `clang64` on x86-64, `clangarm64` on ARM64 — so `bash`, `cmake`, `ninja` and a clang toolchain are available for the cvc5 build. Install the toolchain with the matching package prefix: `pacman -S git mingw-w64-clang-x86_64-{clang,cmake,ninja,python}` (x86-64) or `pacman -S git mingw-w64-clang-aarch64-{clang,cmake,ninja,python}` (ARM64). The JDK can be a native Windows one ([adoptium.net](https://adoptium.net); for ARM64 the [Microsoft Build of OpenJDK](https://learn.microsoft.com/java/openjdk/download) ships windows-aarch64). Note: `pip install z3-solver` on MSYS2 python has no matching binary wheel and will build z3 from source (slow but automatic); this affects both architectures. |
 
 ## What setup.py does
 
