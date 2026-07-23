@@ -7,7 +7,7 @@
 # completed steps are skipped.
 #
 # Requirements (see README.md): git, python3 (>= 3.9, with venv), a C++
-# compiler, cmake, ninja, JDK 17+.
+# compiler, cmake, ninja, JDK 21+.
 
 set -euo pipefail
 cd "$(cd "$(dirname "$0")" && pwd)"
@@ -25,10 +25,12 @@ for tool in git python3 cmake ninja java; do
     }
 done
 java_major=$(java -version 2>&1 | sed -n 's/.*version "\([0-9]*\).*/\1/p' | head -1)
-if [ "${java_major:-0}" -lt 17 ]; then
-    echo "error: JDK 17 or newer is required for SQLSolver," >&2
-    echo "       found java ${java_major:-unknown}" >&2
+if [ "${java_major:-0}" -lt 21 ]; then
+    echo "error: SQLSolver targets Java 21, but 'java' on PATH is" >&2
+    echo "       version ${java_major:-unknown}. Please install JDK 21" >&2
+    echo "       or newer and make it the default:" >&2
     echo "  Debian/Ubuntu: sudo apt install openjdk-21-jdk" >&2
+    echo "                 sudo update-alternatives --config java" >&2
     echo "  macOS:         brew install openjdk" >&2
     exit 1
 fi
