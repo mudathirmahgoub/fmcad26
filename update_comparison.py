@@ -3,13 +3,13 @@
 """
 Run all fmcad experiments and maintain comparison.csv.
 
-Normally invoked through ./run.sh (which also performs setup and renders
+Normally invoked through python3 run.py (which also performs setup and renders
 the plots); direct invocation works too:
 
     sls-reachability/.venv/bin/python3 update_comparison.py [options]
 
 Every path is resolved relative to this script's directory, which after
-./setup.sh looks like:
+python3 setup.py looks like:
 
     fmcad/
       benchmarks/           canonical smt2 benchmark set (this repository)
@@ -95,7 +95,7 @@ this script's TIMEOUT argument does not apply to them.
 
 Usage
 -----
-    ./run.sh                                    # setup + everything + plots
+    python3 run.py                                    # setup + everything + plots
     python3 update_comparison.py --only sets    # one section
     python3 update_comparison.py --configs cvc5,sqlsolver   # some configs
     python3 update_comparison.py -j 8           # limit parallelism
@@ -118,16 +118,21 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 FMCAD_DIR = os.path.dirname(os.path.abspath(__file__))
 BENCHMARKS_DIR = os.path.join(FMCAD_DIR, "benchmarks")
+WINDOWS = os.name == "nt"
 
 SLS_DIR = os.path.join(FMCAD_DIR, "sls-reachability")
 SLS_SOLVER = os.path.join(SLS_DIR, "lia_star_solver.py")
 SLS_TRANSLATOR = os.path.join(SLS_DIR, "smt_to_sls.py")
 SLS_NATIVE_DIR = os.path.join(SLS_DIR, "benchmarks")
-SLS_PYTHON = os.path.join(SLS_DIR, ".venv", "bin", "python3")
+SLS_PYTHON = os.path.join(
+    SLS_DIR, ".venv",
+    *(("Scripts", "python.exe") if WINDOWS else ("bin", "python3")))
 
 CVC5_BINARY = os.path.join(FMCAD_DIR, "cvc5", "build", "install", "bin",
-                           "cvc5")
+                           "cvc5.exe" if WINDOWS else "cvc5")
 SQLSOLVER_DIR = os.path.join(FMCAD_DIR, "SQLSolver")
+GRADLEW = os.path.join(SQLSOLVER_DIR,
+                       "gradlew.bat" if WINDOWS else "gradlew")
 
 DEFAULT_OUT_DIR = os.path.join(FMCAD_DIR, "output")
 DEFAULT_CSV = os.path.join(FMCAD_DIR, "comparison.csv")
@@ -209,18 +214,18 @@ SLS_NATIVE_BENCHMARKS = ["bapa/{}/fol_{:07d}.smt2".format(d, i)
 
 
 def preflight():
-    """Verify the tools setup.sh provides are in place."""
+    """Verify the tools setup.py provides are in place."""
     checks = [
         (SLS_PYTHON, "the sls-reachability virtual environment"),
         (SLS_SOLVER, "the sls-reachability clone"),
         (CVC5_BINARY, "the cvc5 build"),
-        (os.path.join(SQLSOLVER_DIR, "gradlew"), "the SQLSolver clone"),
+        (GRADLEW, "the SQLSolver clone"),
         (os.path.join(SLS_NATIVE_DIR, "bapa"), "the native SLS benchmarks"),
     ]
     missing = [(path, what) for path, what in checks
                if not os.path.exists(path)]
     if missing:
-        lines = ["error: setup is incomplete -- run ./setup.sh first:"]
+        lines = ["error: setup is incomplete -- run python3 setup.py first:"]
         lines += ["  missing {} ({})".format(path, what)
                   for path, what in missing]
         sys.exit("\n".join(lines))
@@ -403,7 +408,7 @@ def run_sqlsolver_pipeline(config_name, prefix, name, out_dir):
     csv in the SQLSolver root."""
     check_sqlsolver_clean()
     test, test_csv = SQLSOLVER_TESTS[prefix]
-    cmd = ["./gradlew", ":superopt:test", "--tests",
+    cmd = [GRADLEW, ":superopt:test", "--tests",
            "sqlsolver.superopt.liastar.SmtBenchmarks." + test,
            "--rerun-tasks", "--console=plain"]
     print("\n=== {}: gradle test {} ===".format(name, test), flush=True)

@@ -7,17 +7,17 @@ downloads all tools, builds them, runs every experiment, and produces
 ```bash
 git clone https://github.com/mudathirmahgoub/fmcad26.git
 cd fmcad26
-./run.sh
+python3 run.py
 ```
 
 Expect roughly 30–60 minutes for the one-time cvc5 build and 1–2 hours of
-experiments (dominated by per-benchmark timeouts). `./run.sh` is
+experiments (dominated by per-benchmark timeouts). `python3 run.py` is
 restartable: completed setup steps are skipped and `comparison.csv` is
 saved after every configuration.
 
 ## Prerequisites
 
-Linux or macOS with:
+Linux, macOS or Windows with:
 
 | requirement | notes |
 |---|---|
@@ -26,15 +26,16 @@ Linux or macOS with:
 | C++ compiler, `cmake`, `ninja` | Debian/Ubuntu: `sudo apt install build-essential cmake ninja-build`; macOS: Xcode CLT + `brew install cmake ninja` |
 | JDK 21+ (`java` on PATH) | for the SQLSolver gradle build; Debian/Ubuntu: `sudo apt install openjdk-21-jdk` (then `sudo update-alternatives --config java` if an older JDK is the default) |
 | ~4 GB disk, internet access | cvc5 `--auto-download` fetches its own dependencies |
+| Windows only: MSYS2 | run everything inside an MSYS2 shell (e.g. clang64) so `bash`, `cmake`, `ninja` and a clang toolchain are available for the cvc5 build: `pacman -S git mingw-w64-clang-x86_64-{clang,cmake,ninja,python}`; the JDK can be a native Windows one ([adoptium.net](https://adoptium.net)) |
 
-## What setup.sh does
+## What setup.py does
 
 Everything is created inside this directory (relative paths only):
 
 ```
 fmcad/
-├── run.sh                # the one command: setup + experiments + plots
-├── setup.sh              # idempotent: clone + build everything
+├── run.py                # the one command: setup + experiments + plots
+├── setup.py              # idempotent: clone + build everything
 ├── update_comparison.py  # experiment orchestrator (see its docstring)
 ├── plot.py               # renders cactus + scatter plots from comparison.csv
 ├── benchmarks/           # canonical smt2 benchmark set (in this repo)
@@ -96,9 +97,9 @@ If that commit is ever rebased, update `MODIFICATION_COMMIT` in
 Partial runs, e.g.:
 
 ```bash
-./run.sh --only sql                       # one section: sets | bags | sql
-./run.sh --configs cvc5,modified_sqlsolver
-./run.sh 60 -j 8                          # timeout 60s, 8 parallel jobs
+python3 run.py --only sql                       # one section: sets | bags | sql
+python3 run.py --configs cvc5,modified_sqlsolver
+python3 run.py 60 -j 8                          # timeout 60s, 8 parallel jobs
 sls-reachability/.venv/bin/python3 update_comparison.py --parse-only
 ```
 
@@ -119,7 +120,7 @@ argument does not apply to those two configurations.
   (`filename,result,duration`), what `--parse-only` re-reads.
 - `cactus_plot.png`, `scatter_cvc5_vs_unfold5.png`,
   `scatter_cvc5_vs_modified_sqlsolver.png` — rendered by `plot.py` from
-  `comparison.csv` at the end of `./run.sh`.
+  `comparison.csv` at the end of `python3 run.py`.
 
 ## Sanity checking a run
 
@@ -137,18 +138,18 @@ returns `unknown` there, which is the point of the modification.
 
 ## Troubleshooting
 
-- `error: setup is incomplete -- run ./setup.sh first` — a tool is
+- `error: setup is incomplete -- run python3 setup.py first` — a tool is
   missing; the message lists which one.
 - cvc5 wheel fails to install: the wheel in `cvc5/build/repaired-wheel/`
   is built for the python that configured the build; recreate the venv
   with that same `python3`.
-- `UnsatisfiedLinkError` from the SQLSolver tests: re-run `./setup.sh`
+- `UnsatisfiedLinkError` from the SQLSolver tests: re-run `python3 setup.py`
   so the cvc5 java bindings built by the cvc5 step are (re)copied into
   `SQLSolver/lib/` (step 4).
 - `error: invalid source release: N` from gradle: your JDK is older than
   the level SQLSolver targets (21) — install JDK 21+ and make it the
-  default (`setup.sh` checks this up front and refuses to start
-  otherwise). Re-running `./run.sh` also fast-forwards the existing
+  default (`setup.py` checks this up front and refuses to start
+  otherwise). Re-running `python3 run.py` also fast-forwards the existing
   clones, so upstream fixes arrive automatically.
 - gradle "up-to-date" confusion never affects results: the orchestrator
   passes `--rerun-tasks` so tests always execute.
