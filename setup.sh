@@ -94,17 +94,16 @@ fi
 sls-reachability/.venv/bin/pip install --quiet --force-reinstall "$wheel"
 
 # --------------------------------------------------------------------------
-# 4. SQLSolver: on Linux, refresh the bundled cvc5 java bindings with the
-#    freshly built, platform-matching ones (the repository ships
-#    macOS-tested libraries); then compile the test classes.
+# 4. SQLSolver: install the cvc5 java bindings that the cvc5 build just
+#    produced (jar + JNI library + shared libraries) into SQLSolver/lib.
+#    No pre-existing cvc5 binding files are assumed on any platform; the
+#    jar goes under the name cvc5-1.3.4 that build.gradle expects. Then
+#    compile the test classes.
 # --------------------------------------------------------------------------
-if [ "$(uname -s)" = "Linux" ]; then
-    step "Refreshing SQLSolver cvc5 java bindings for Linux"
-    # build.gradle expects the jar under the name cvc5-1.3.4
-    cp cvc5/build/install/share/java/cvc5.jar SQLSolver/lib/cvc5-1.3.4.jar
-    cp -a cvc5/build/install/lib/libcvc5*.so* SQLSolver/lib/ 2>/dev/null || true
-    cp -a cvc5/build/install/lib/*.so* SQLSolver/lib/ 2>/dev/null || true
-fi
+step "Installing the built cvc5 java bindings into SQLSolver/lib"
+cp cvc5/build/install/share/java/cvc5.jar SQLSolver/lib/cvc5-1.3.4.jar
+cp -a cvc5/build/install/lib/*.dylib SQLSolver/lib/ 2>/dev/null || true
+cp -a cvc5/build/install/lib/*.so* SQLSolver/lib/ 2>/dev/null || true
 
 step "Compiling SQLSolver test classes"
 (cd SQLSolver && ./gradlew :superopt:testClasses --console=plain)

@@ -61,10 +61,12 @@ Steps, in order:
    `cvc5/build/repaired-wheel/`.
 3. Create `sls-reachability/.venv` and install `z3-solver==4.16.0.0`,
    `pandas`, `numpy`, `matplotlib`, and the cvc5 wheel from step 2.
-4. On Linux only: copy the freshly built cvc5 java bindings into
-   `SQLSolver/lib/` (the repository ships macOS-tested libraries; the jar
-   is installed under the name `cvc5-1.3.4.jar` that `build.gradle`
-   expects). Then compile the SQLSolver test classes with gradle.
+4. Copy the cvc5 java bindings produced by the cvc5 build (the jar from
+   `cvc5/build/install/share/java/` and the JNI/shared libraries from
+   `cvc5/build/install/lib/`) into `SQLSolver/lib/` — no pre-existing
+   cvc5 binding files are assumed on any platform; the jar is installed
+   under the name `cvc5-1.3.4.jar` that `build.gradle` expects. Then
+   compile the SQLSolver test classes with gradle.
 
 ## The experiments
 
@@ -140,8 +142,8 @@ returns `unknown` there, which is the point of the modification.
 - cvc5 wheel fails to install: the wheel in `cvc5/build/repaired-wheel/`
   is built for the python that configured the build; recreate the venv
   with that same `python3`.
-- `UnsatisfiedLinkError` from the SQLSolver tests on Linux: re-run
-  `./setup.sh` so the freshly built cvc5 java bindings are copied into
+- `UnsatisfiedLinkError` from the SQLSolver tests: re-run `./setup.sh`
+  so the cvc5 java bindings built by the cvc5 step are (re)copied into
   `SQLSolver/lib/` (step 4).
 - `error: invalid source release: N` from gradle: your JDK is older than
   the level SQLSolver targets (21) — install JDK 21+ and make it the
