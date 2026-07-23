@@ -1,0 +1,10 @@
+# tool clones and build products created by setup.sh
+sls-reachability/
+SQLSolver/
+cvc5/
+
+# experiment outputs
+output/
+
+__pycache__/
+.DS_Store

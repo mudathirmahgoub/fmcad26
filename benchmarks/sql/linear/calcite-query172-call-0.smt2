@@ -1,0 +1,27 @@
+; WARNING: star parameters [u6, u7] could not be eliminated
+; exactly. They are bound per-summand in the lambda below with fresh
+; unconstrained sums, which WEAKENS the formula: sat of this file does not
+; imply sat of the original (only unsat transfers).
+(set-logic HO_ALL)
+(declare-const u5 Int)
+(declare-const u6 Int)
+(declare-const u7 Int)
+(declare-const u9 Int)
+(declare-const u11 Int)
+(declare-const u10 Int)
+(declare-const u13 Int)
+(declare-const u12 Int)
+(declare-const u15 Int)
+(declare-const u14 Int)
+(declare-const u0 Int)
+(declare-const u1 Int)
+(declare-const u2 Int)
+(declare-const u3 Int)
+(declare-const u4 Int)
+(declare-const sumFresh0 Int)
+(declare-const sumFresh1 Int)
+(declare-const sumFresh2 Int)
+(declare-const sumFresh3 Int)
+(declare-const sumFresh4 Int)
+(assert (and (not (= (ite (and (= (ite (and (= u4 4) (= u5 5)) u0 0) 0) (and (and (and (= (ite (= u7 0) 0 1) 0) (= u4 4)) (= u5 5)) (not (= u1 0)))) (ite (and (and (= (ite (and (= u4 4) (= u5 5)) u2 0) 0) (and (and (= u4 4) (= u5 5)) (not (= u3 0)))) (not (= u7 0))) (+ 1 1) 1) (ite (and (and (= (ite (and (= u4 4) (= u5 5)) u2 0) 0) (and (and (= u4 4) (= u5 5)) (not (= u3 0)))) (not (= u7 0))) 1 0)) (ite (and (and (= (ite (= u4 4) u0 0) 0) (= u5 5)) (and (and (= (ite (= u7 0) 0 1) 0) (= u4 4)) (not (= u1 0)))) (ite (and (and (and (= (ite (= u4 4) u2 0) 0) (= u5 5)) (not (= u7 0))) (and (= u4 4) (not (= u3 0)))) (+ 1 1) 1) (ite (and (and (and (= (ite (= u4 4) u2 0) 0) (= u5 5)) (not (= u7 0))) (and (= u4 4) (not (= u3 0)))) 1 0)))) (int.star-contains (lambda ((u9 Int) (u13 Int) (u14 Int) (u15 Int) (u11 Int) (u10 Int) (u12 Int) (u6 Int) (u7 Int) ) (and (and (and (and (= u9 (ite (and (= (ite (= u11 0) 0 1) 0) (< u6 u10)) u12 0)) (= u13 u12)) (= u14 (ite (= (ite (= u11 0) 0 1) 0) u12 0))) (= u15 (ite (= u6 u10) u12 0))) (= u11 (ite (= u10 u6) u7 u11)))) u0 u3 u2 u1 sumFresh0 sumFresh1 sumFresh2 sumFresh3 sumFresh4 )))
+(check-sat)
