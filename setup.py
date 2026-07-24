@@ -124,7 +124,7 @@ def prepare_venv():
              os.path.join(ROOT, "sls-reachability", ".venv")])
     run([python, "-m", "pip", "install", "--quiet", "--upgrade", "pip"])
     run([python, "-m", "pip", "install", "--quiet",
-         "z3-solver==4.16.0.0", "pandas", "numpy", "matplotlib"])
+         "z3-solver==5.0.0.0", "pandas", "numpy", "matplotlib"])
 
     wheels = glob.glob(os.path.join(ROOT, "cvc5", "build",
                                     "repaired-wheel", "*.whl"))

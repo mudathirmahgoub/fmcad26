@@ -60,7 +60,7 @@ Steps, in order:
    --auto-download --all-bindings --normaliz`, then `ninja install` in
    `cvc5/build`. This also produces the python wheel in
    `cvc5/build/repaired-wheel/`.
-3. Create `sls-reachability/.venv` and install `z3-solver==4.16.0.0`,
+3. Create `sls-reachability/.venv` and install `z3-solver==5.0.0.0`,
    `pandas`, `numpy`, `matplotlib`, and the cvc5 wheel from step 2.
 4. Copy the cvc5 java bindings produced by the cvc5 build (the jar from
    `cvc5/build/install/share/java/` and the JNI/shared libraries from
