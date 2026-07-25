@@ -45,10 +45,10 @@ comparison.csv:
     cvc5
         the liastar cvc5 binary: cvc5/build/install/bin/cvc5 <file>
     sqlsolver / modified_sqlsolver
-        the SQLSolver pipeline, via its SmtBenchmarks JUnit tests
-        (runAllBapaBenchmarks / runAllMapaBenchmarks /
-        runLinearSqlSolverBenchmarks), which read ../benchmarks relative
-        to the SQLSolver clone -- i.e. the same benchmarks/ directory
+        the SQLSolver pipeline, via its SmtBenchmarksMain runner
+        (gradle task :superopt:smtBenchmarks), which reads ../benchmarks
+        relative to the SQLSolver clone -- i.e. the same benchmarks/
+        directory -- and honors this script's TIMEOUT and -j arguments
 
 Each configuration's file column in comparison.csv records the file that
 configuration actually ran (the native path for sets/bags SLS, the
@@ -88,10 +88,10 @@ Benchmarks of the sets/bags sections run in parallel (all CPUs but two by
 default); the fast sql section runs sequentially for accurate timings; -j
 overrides both. The worker pool uses threads, not processes, deliberately:
 each job only spawns and waits on a solver subprocess, which releases the
-GIL, so threads already provide full parallelism. The JUnit tests
-parallelize internally the same way (except the sql test, which is
-sequential); their 100s per-benchmark timeout is hardcoded in Java, so
-this script's TIMEOUT argument does not apply to them.
+GIL, so threads already provide full parallelism. The SQLSolver runner
+parallelizes internally the same way and receives this script's TIMEOUT
+and job count (sequential for the sql section), so all six
+configurations share the same timeout and parallelism settings.
 
 Usage
 -----
@@ -166,12 +166,12 @@ HEADER = [
 
 # The SQLSolver pipeline and its modification commit (see the docstring)
 MODIFICATION_COMMIT = "e2acacee3506fef2372313db2fddf6f6659e57ea"
-# Per section: the SmtBenchmarks JUnit test that runs the pipeline on it,
-# and the csv file the test writes into the SQLSolver root
-SQLSOLVER_TESTS = {
-    "bapa": ("runAllBapaBenchmarks",         "sql_bapa.csv"),
-    "mapa": ("runAllMapaBenchmarks",         "sql_mapa.csv"),
-    "sql":  ("runLinearSqlSolverBenchmarks", "sql_solver.csv"),
+# Per section: the csv file the SmtBenchmarksMain runner writes into the
+# SQLSolver root (its suite names equal the section prefixes)
+SQLSOLVER_OUTPUTS = {
+    "bapa": "sql_bapa.csv",
+    "mapa": "sql_mapa.csv",
+    "sql":  "sql_solver.csv",
 }
 
 
@@ -396,22 +396,24 @@ def set_pipeline_modified(modified):
                        check=True, input=diff)
 
 
-def run_sqlsolver_pipeline(config_name, prefix, name, out_dir):
+def run_sqlsolver_pipeline(config_name, prefix, name, out_dir, timeout,
+                           jobs):
     """Run the SQLSolver pipeline ('sqlsolver' = modification commit
     reverted, 'modified_sqlsolver' = HEAD) on one section's benchmarks and
     write <name>.csv into out_dir.
 
-    Unlike the other runners this is one gradle invocation: the section's
-    SmtBenchmarks JUnit test recompiles the pipeline, runs the benchmarks
-    with a hardcoded 100s per-benchmark timeout (in parallel, except the
-    sequential sql test) and writes filename,result,duration rows to a
-    csv in the SQLSolver root."""
+    Unlike the other runners this is one gradle invocation: the
+    SmtBenchmarksMain runner (task :superopt:smtBenchmarks) recompiles the
+    pipeline, runs the section's suite with the given per-benchmark
+    timeout on `jobs` parallel workers, and writes
+    filename,result,duration rows to a csv in the SQLSolver root."""
     check_sqlsolver_clean()
-    test, test_csv = SQLSOLVER_TESTS[prefix]
-    cmd = [GRADLEW, ":superopt:test", "--tests",
-           "sqlsolver.superopt.liastar.SmtBenchmarks." + test,
-           "--rerun-tasks", "--console=plain"]
-    print("\n=== {}: gradle test {} ===".format(name, test), flush=True)
+    test_csv = SQLSOLVER_OUTPUTS[prefix]
+    bench_args = "{} --timeout={} --jobs={}".format(prefix, timeout, jobs)
+    cmd = [GRADLEW, ":superopt:smtBenchmarks",
+           "-PbenchArgs=" + bench_args, "--console=plain"]
+    print("\n=== {}: gradle smtBenchmarks {} ===".format(name, bench_args),
+          flush=True)
 
     if config_name == "sqlsolver":
         set_pipeline_modified(False)
@@ -421,9 +423,9 @@ def run_sqlsolver_pipeline(config_name, prefix, name, out_dir):
         if config_name == "sqlsolver":
             set_pipeline_modified(True)
 
-    # the test lists files relative to the SQLSolver root (../benchmarks/
-    # ...); comparison.csv uses names relative to benchmarks/, and
-    # lowercase results throughout
+    # the runner lists files relative to the SQLSolver root
+    # (../benchmarks/...); comparison.csv uses names relative to
+    # benchmarks/, and lowercase results throughout
     results = {}
     with open(os.path.join(SQLSOLVER_DIR, test_csv), newline="") as f:
         for row in csv.DictReader(f):
@@ -552,8 +554,8 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("timeout", metavar="TIMEOUT", nargs="?", type=int,
                    default=100,
-                   help="timeout per benchmark in seconds (default: 100; "
-                        "the SQLSolver JUnit tests hardcode 100s)")
+                   help="timeout per benchmark in seconds, applied to all "
+                        "six configurations (default: 100)")
     p.add_argument("-j", "--jobs", type=int, default=None,
                    help="number of benchmarks to run in parallel (default: "
                         "all cpus but two, here {}; 1 -- i.e. sequential "
@@ -613,7 +615,8 @@ def main():
             if not args.parse_only:
                 if config.name in SQLSOLVER_FLAVORS:
                     run_sqlsolver_pipeline(config.name, section.prefix,
-                                           name, args.out_dir)
+                                           name, args.out_dir,
+                                           args.timeout, jobs)
                 elif config.name == "cvc5":
                     run_configuration(name, section.benchmarks, solve_cvc5,
                                       args.timeout, config.solver_args,

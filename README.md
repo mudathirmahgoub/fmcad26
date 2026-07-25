@@ -83,10 +83,11 @@ details live in the `update_comparison.py` docstring; the short version:
 | `sqlsolver` | SQLSolver pipeline, **original** (modification commit reverted during the run — see below) |
 | `modified_sqlsolver` | SQLSolver pipeline, **modified** (clone HEAD) |
 
-The two SQLSolver flavors run the same JUnit tests
-(`SmtBenchmarks.runAllBapaBenchmarks` / `runAllMapaBenchmarks` /
-`runLinearSqlSolverBenchmarks`, reading `../benchmarks` relative to the
-SQLSolver clone — i.e. this repository's `benchmarks/`). The modification
+The two SQLSolver flavors run the same benchmark runner
+(`SmtBenchmarksMain`, via the gradle task `:superopt:smtBenchmarks`,
+reading `../benchmarks` relative to the SQLSolver clone — i.e. this
+repository's `benchmarks/`), which receives the orchestrator's timeout
+and job count. The modification
 is commit `e2acacee35...` ("overapproximation unknown"); `sqlsolver`
 reverse-applies its diff before running and restores it afterwards. Both
 flavors abort unless `SQLSolver/superopt/src/main` has no uncommitted
@@ -106,9 +107,9 @@ sls-reachability/.venv/bin/python3 update_comparison.py --parse-only
 Sets/bags benchmarks run in parallel (all CPUs but two by default); the
 sql section runs sequentially for accurate timings. Parallelism inflates
 measured durations somewhat through CPU contention — use a small `-j`
-when timing fidelity matters more than wall-clock. The SQLSolver tests
-hardcode their 100s per-benchmark timeout in Java, so the TIMEOUT
-argument does not apply to those two configurations.
+when timing fidelity matters more than wall-clock. The TIMEOUT and `-j`
+arguments apply to all six configurations, including the two SQLSolver
+ones (forwarded to their benchmark runner).
 
 ## Outputs
 
