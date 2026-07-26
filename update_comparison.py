@@ -100,6 +100,18 @@ Usage
     python3 update_comparison.py --configs cvc5,sqlsolver   # some configs
     python3 update_comparison.py -j 8           # limit parallelism
     python3 update_comparison.py --parse-only   # just re-read result csvs
+    python3 update_comparison.py --benchmarks card/cvc5_bapa/fol_0000113.smt2
+                                                # a single benchmark
+    python3 update_comparison.py --benchmarks fol_0000113.smt2,fol_0000117.smt2
+                                                # a list; bare names match in
+                                                # every directory and section
+
+--benchmarks restricts every selected configuration to the named
+benchmarks. Names are relative to benchmarks/ (as in comparison.csv), or
+whole-component path suffixes thereof: a bare fol_0000113.smt2 selects the
+arith and card variants of both the sets and bags sections. The subset's
+results are merged into the existing output/ csvs, so the other rows of
+comparison.csv keep their previous results.
 """
 
 import argparse
@@ -315,10 +327,11 @@ def solve_cvc5(benchmark, timeout, solver_args):
 
 
 def run_configuration(name, benchmarks, solver, timeout, solver_args, jobs,
-                      out_dir):
-    """Run all benchmarks of one configuration through `solver`
+                      out_dir, order=None, merge=False):
+    """Run the given benchmarks of one configuration through `solver`
     (solve_lia_star, solve_sls or solve_cvc5), then write <name>.csv into
-    out_dir.
+    out_dir -- in `order` (default: the run order), merged into the
+    existing csv when `merge` is set (subset runs).
 
     With jobs == 1 the benchmarks run strictly sequentially, which gives
     the most accurate timings; otherwise a thread pool supervises `jobs`
@@ -347,20 +360,27 @@ def run_configuration(name, benchmarks, solver, timeout, solver_args, jobs,
             for done, future in enumerate(as_completed(futures), 1):
                 record(future.result(), done)
 
-    write_run_file(name, benchmarks, results, out_dir)
+    write_run_file(name, order or benchmarks, results, out_dir, merge)
 
 
-def write_run_file(name, benchmarks, results, out_dir):
+def write_run_file(name, order, results, out_dir, merge=False):
     """Write <name>.csv with filename,result,duration rows into out_dir,
-    in benchmark order (results may arrive in completion order)."""
+    in `order` (results may arrive in completion order). With merge=True
+    the results only cover a subset of the benchmarks: rows of an
+    existing <name>.csv are kept for all others."""
     os.makedirs(out_dir, exist_ok=True)
     csv_path = os.path.join(out_dir, name + ".csv")
+    if merge and os.path.exists(csv_path):
+        merged = parse_results(csv_path)
+        merged.update(results)
+        results = merged
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["filename", "result", "duration"])
-        for benchmark in benchmarks:
-            result, duration = results[benchmark]
-            writer.writerow([benchmark, result, duration])
+        for benchmark in order:
+            if benchmark in results:
+                result, duration = results[benchmark]
+                writer.writerow([benchmark, result, duration])
     print("  wrote {}".format(csv_path), flush=True)
 
 
@@ -397,10 +417,12 @@ def set_pipeline_modified(modified):
 
 
 def run_sqlsolver_pipeline(config_name, prefix, name, out_dir, timeout,
-                           jobs):
+                           jobs, files=None):
     """Run the SQLSolver pipeline ('sqlsolver' = modification commit
-    reverted, 'modified_sqlsolver' = HEAD) on one section's benchmarks and
-    write <name>.csv into out_dir.
+    reverted, 'modified_sqlsolver' = HEAD) on one section's benchmarks --
+    all of them, or only `files` (names relative to benchmarks/) -- and
+    write <name>.csv into out_dir (merged into the existing csv on subset
+    runs).
 
     Unlike the other runners this is one gradle invocation: the
     SmtBenchmarksMain runner (task :superopt:smtBenchmarks) recompiles the
@@ -410,6 +432,10 @@ def run_sqlsolver_pipeline(config_name, prefix, name, out_dir, timeout,
     check_sqlsolver_clean()
     test_csv = SQLSOLVER_OUTPUTS[prefix]
     bench_args = "{} --timeout={} --jobs={}".format(prefix, timeout, jobs)
+    if files:
+        # SmtBenchmarksMain matches these as path suffixes of the suite's
+        # smt2 files (see its --files documentation)
+        bench_args += " --files=" + ",".join(files)
     cmd = [GRADLEW, ":superopt:smtBenchmarks",
            "-PbenchArgs=" + bench_args, "--console=plain"]
     print("\n=== {}: gradle smtBenchmarks {} ===".format(name, bench_args),
@@ -436,11 +462,13 @@ def run_sqlsolver_pipeline(config_name, prefix, name, out_dir, timeout,
                                   float(row["duration"]))
 
     section = next(s for s in SECTIONS if s.prefix == prefix)
-    missing = [b for b in section.benchmarks if b not in results]
+    expected = files if files else section.benchmarks
+    missing = [b for b in expected if b not in results]
     if missing:
         print("  WARNING: {} has no result for {} benchmarks (e.g. {})"
               .format(test_csv, len(missing), missing[0]))
-    write_run_file(name, sorted(results), results, out_dir)
+    write_run_file(name, section.benchmarks, results, out_dir,
+                   merge=files is not None)
 
 
 # ---------------------------------------------------------------------------
@@ -576,9 +604,27 @@ def parse_args():
                    help="run/update only these configurations ({}; "
                         "default: all)".format(
                             ", ".join(c.name for c in CONFIGS)))
+    p.add_argument("--benchmarks", metavar="NAME[,NAME...]", default=None,
+                   help="run only these benchmarks: names relative to "
+                        "benchmarks/ as in comparison.csv, or "
+                        "whole-component path suffixes thereof (a bare "
+                        "fol_0000113.smt2 matches every directory and "
+                        "section); results are merged into the existing "
+                        "output csvs (default: all benchmarks)")
     args = p.parse_args()
     args.configs = args.configs.split(",") if args.configs else None
+    args.benchmarks = (args.benchmarks.split(",") if args.benchmarks
+                       else None)
     return args
+
+
+def match_benchmark(benchmark, names):
+    """Whether the benchmark (a path relative to benchmarks/) is named by
+    one of `names`: an exact match or a whole-component path suffix
+    (e.g. fol_0000113.smt2 or card/cvc5_bapa/fol_0000113.smt2)."""
+    b = benchmark.replace(os.sep, "/")
+    return any(b == n or b.endswith("/" + n)
+               for n in (name.replace(os.sep, "/") for name in names))
 
 
 def main():
@@ -594,6 +640,16 @@ def main():
                             1 + section.row + len(section.benchmarks)]
         jobs = args.jobs or (1 if section.prefix == "sql"
                              else DEFAULT_JOBS)
+
+        # --benchmarks: indices of the selected benchmarks within the
+        # section; the same indices select the corresponding native SLS
+        # files (rows correspond across encodings by position)
+        selected = None
+        if args.benchmarks:
+            selected = [i for i, b in enumerate(section.benchmarks)
+                        if match_benchmark(b, args.benchmarks)]
+            if not selected:
+                continue
 
         for config in CONFIGS:
             if args.configs and config.name not in args.configs:
@@ -612,20 +668,29 @@ def main():
                 solver = solve_lia_star
                 extra_args = ["--mapa"] if section.prefix == "mapa" else []
 
+            run_benchmarks = (benchmarks if selected is None
+                              else [benchmarks[i] for i in selected])
+
             if not args.parse_only:
                 if config.name in SQLSOLVER_FLAVORS:
                     run_sqlsolver_pipeline(config.name, section.prefix,
                                            name, args.out_dir,
-                                           args.timeout, jobs)
+                                           args.timeout, jobs,
+                                           files=(None if selected is None
+                                                  else run_benchmarks))
                 elif config.name == "cvc5":
-                    run_configuration(name, section.benchmarks, solve_cvc5,
+                    run_configuration(name, run_benchmarks, solve_cvc5,
                                       args.timeout, config.solver_args,
-                                      jobs, args.out_dir)
+                                      jobs, args.out_dir,
+                                      order=section.benchmarks,
+                                      merge=selected is not None)
                 else:
-                    run_configuration(name, benchmarks, solver,
+                    run_configuration(name, run_benchmarks, solver,
                                       args.timeout,
                                       config.solver_args + extra_args,
-                                      jobs, args.out_dir)
+                                      jobs, args.out_dir,
+                                      order=benchmarks,
+                                      merge=selected is not None)
             set_file_column(section_rows, benchmarks, config.column)
             update_from_results(rows, args.csv, args.out_dir, name,
                                 section_rows, config.column)

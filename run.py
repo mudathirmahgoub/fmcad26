@@ -34,7 +34,12 @@ def main():
     subprocess.run([python, os.path.join(ROOT, "plot.py")], cwd=ROOT,
                    check=True)
 
-    print("\nDone: comparison.csv, cactus_plot.png, scatter_*.png")
+    # the paper's result-summary table, printed and saved next to the csv
+    subprocess.run([python, os.path.join(ROOT, "latex_table.py")], cwd=ROOT,
+                   check=True)
+
+    print("\nDone: comparison.csv, cactus_plot.png, scatter_*.png, "
+          "comparison_table.tex")
 
 
 if __name__ == "__main__":
