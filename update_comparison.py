@@ -43,7 +43,9 @@ comparison.csv:
         native form, so there SLS goes through the smt_to_sls.py
         translator on the benchmarks/ files.
     cvc5
-        the liastar cvc5 binary: cvc5/build/install/bin/cvc5 <file>
+        the liastar cvc5 build, through its python API (see the
+        "Running cvc5 through its python API" comment below); always
+        sequential, one forked child per benchmark
     sqlsolver / modified_sqlsolver
         the SQLSolver pipeline, via its SmtBenchmarksMain runner
         (gradle task :superopt:smtBenchmarks), which reads ../benchmarks
@@ -298,32 +300,116 @@ def solve_sls(benchmark, timeout, solver_args):
     return benchmark, result, duration
 
 
-def solve_cvc5(benchmark, timeout, solver_args):
-    """Run the liastar cvc5 binary on a single benchmark. The timeout is
-    also passed to cvc5 as --tlimit (milliseconds); hitting it makes cvc5
-    exit with 'cvc5 interrupted by timeout.'."""
-    cmd = [CVC5_BINARY, os.path.join(BENCHMARKS_DIR, benchmark),
-           "--tlimit={}".format(timeout * 1000)]
+# ---------------------------------------------------------------------------
+# Running cvc5 through its python API
+# ---------------------------------------------------------------------------
+# The liastar cvc5 build is used through its python bindings (installed
+# into the sls-reachability virtual environment by the cvc5 build)
+# rather than by spawning the cvc5 binary: loading the binary and its
+# dylibs costs ~40ms per invocation on macOS, which distorts the
+# timings of the many sub-second benchmarks. The bindings are imported
+# ONCE in the parent process; each benchmark then runs in a fork()ed
+# child, so the already-loaded library is shared and per-benchmark
+# overhead drops to a few milliseconds, while a fresh child still
+# isolates every benchmark (leaks, crashes, solver state).
+#
+# The child drives the smt2 file through cvc5's InputParser and
+# intercepts its (check-sat) command to inspect the Result object
+# directly. cvc5's own tlimit option is set but rarely fires through
+# the API: it is enforced by a signal handler that only exists in the
+# CLI driver, and the API bindings hold the python GIL for the whole
+# checkSat() call, so an in-process solve stuck inside the liastar DNF
+# distribution loop (which never polls the resource manager) can be
+# stopped by nothing except killing the child -- which is what the
+# parent does when the wall budget expires. A killed child reports no
+# statistics; cvc5_stats.py falls back to the binary for those runs.
+
+_CVC5_FORK = None  # multiprocessing fork context, created on first use
+
+
+def _cvc5_child(path, timeout_ms, conn):
+    """Forked per-benchmark worker: parse the file, execute its
+    commands -- intercepting (check-sat) -- and send (answer, duration,
+    {statistic: value}) over the pipe. Statistic values are rendered in
+    the format the cvc5 binary prints (times in bare ms, histograms as
+    '{ A: 1, B: 2 }')."""
+    import cvc5
     start = time.time()
     try:
-        proc = subprocess.run(cmd, capture_output=True, timeout=timeout,
-                              cwd=FMCAD_DIR)
+        tm = cvc5.TermManager()
+        solver = cvc5.Solver(tm)
+        solver.setOption("tlimit", str(timeout_ms))
+        parser = cvc5.InputParser(solver)
+        parser.setFileInput(cvc5.InputLanguage.SMT_LIB_2_6, path)
+        symbols = parser.getSymbolManager()
+        answer = "unknown"
+        while True:
+            cmd = parser.nextCommand()
+            if cmd.isNull():
+                break
+            if str(cmd).strip() == "(check-sat)":
+                result = solver.checkSat()
+                if result.isSat():
+                    answer = "sat"
+                elif result.isUnsat():
+                    answer = "unsat"
+                elif (result.isUnknown()
+                        and result.getUnknownExplanation()
+                        == cvc5.UnknownExplanation.TIMEOUT):
+                    answer = "timeout"
+            else:
+                cmd.invoke(solver, symbols)
         duration = time.time() - start
-        output = (proc.stdout + proc.stderr).decode("utf-8")
-        if "interrupted by timeout" in output:
-            result = "timeout"
-        elif proc.returncode != 0:
-            result = "error"
-        else:
-            result = "unknown"
-            for line in output.splitlines():
-                if line.strip() in ("sat", "unsat", "unknown"):
-                    result = line.strip()
-                    break
-    except subprocess.TimeoutExpired:
-        duration = time.time() - start
-        result = "timeout"
-    return benchmark, result, duration
+        stats = {}
+        for name, entry in solver.getStatistics().get(True, True).items():
+            value = entry["value"]
+            if isinstance(value, dict):
+                value = "{ " + ", ".join(
+                    "{}: {}".format(k, v) for k, v in value.items()) + " }"
+            else:
+                value = str(value)
+                if value.endswith("ms") and value[:-2].isdigit():
+                    value = value[:-2]
+            stats[name] = value
+        conn.send((answer, duration, stats))
+    except Exception as exc:
+        conn.send(("error", time.time() - start, {"error": str(exc)}))
+    finally:
+        conn.close()
+        os._exit(0)
+
+
+def solve_cvc5_api(path, timeout):
+    """Run one smt2 file through the cvc5 python API in a forked child.
+    Returns (answer, duration, stats); a child still running when the
+    wall budget expires is killed and reported as ('timeout', timeout,
+    {})."""
+    global _CVC5_FORK
+    if _CVC5_FORK is None:
+        import cvc5  # noqa: F401 -- pay the library load once, pre-fork
+        import multiprocessing
+        _CVC5_FORK = multiprocessing.get_context("fork")
+    receiver, sender = _CVC5_FORK.Pipe(False)
+    child = _CVC5_FORK.Process(target=_cvc5_child,
+                               args=(path, timeout * 1000, sender),
+                               daemon=True)
+    child.start()
+    sender.close()
+    if receiver.poll(timeout):
+        answer, duration, stats = receiver.recv()
+        child.join()
+        return answer, duration, stats
+    child.kill()
+    child.join()
+    return "timeout", float(timeout), {}
+
+
+def solve_cvc5(benchmark, timeout, solver_args):
+    """Run cvc5 on a single benchmark via the python API (see the
+    comment above). Returns (benchmark, result, duration)."""
+    answer, duration, _ = solve_cvc5_api(
+        os.path.join(BENCHMARKS_DIR, benchmark), timeout)
+    return benchmark, answer, duration
 
 
 def run_configuration(name, benchmarks, solver, timeout, solver_args, jobs,
@@ -679,9 +765,12 @@ def main():
                                            files=(None if selected is None
                                                   else run_benchmarks))
                 elif config.name == "cvc5":
+                    # always sequential: the API runner forks one child
+                    # at a time for accurate timings (see the python
+                    # API comment above)
                     run_configuration(name, run_benchmarks, solve_cvc5,
                                       args.timeout, config.solver_args,
-                                      jobs, args.out_dir,
+                                      1, args.out_dir,
                                       order=section.benchmarks,
                                       merge=selected is not None)
                 else:

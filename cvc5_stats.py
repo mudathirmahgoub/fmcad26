@@ -9,10 +9,11 @@ Collect cvc5 statistics over benchmarks selected from comparison.csv.
 
 Selects the benchmarks whose cvc5 result column of comparison.csv matches
 the given result (all = every benchmark), then runs the liastar cvc5
-binary on each one SEQUENTIALLY -- one at a time, for meaningful timers --
-with
-
-    cvc5 --tlimit=<timeout in ms> --stats --stats-all --stats-internal
+build on each one SEQUENTIALLY -- one at a time, for meaningful timers --
+through its python API (update_comparison.solve_cvc5_api: bindings
+loaded once, one forked child per benchmark, statistics collected with
+Statistics.get(True, True) after the run completes; see the "Running
+cvc5 through its python API" comment in update_comparison.py)
 
 and writes one row per benchmark to --out (default:
 output/cvc5_stats_<selection>.csv): benchmark, answer, wall_seconds, then
@@ -21,9 +22,15 @@ histogram-valued statistics like { ARITH_UNATE: 1 } are stored verbatim).
 Times reported by cvc5 (18ms) are stored as integer milliseconds.
 
 The per-benchmark timeout defaults to 100 seconds, matching
-update_comparison.py, so re-collecting the 'timeout' selection reproduces
-the interrupted-at-100s statistics of the paper runs (cvc5 still prints
-its statistics when interrupted by --tlimit).
+update_comparison.py. A run killed at the wall timeout cannot report API
+statistics (the child is gone), so those benchmarks are rerun once
+through the cvc5 binary with
+
+    cvc5 --tlimit=<timeout in ms> --stats --stats-all --stats-internal
+
+whose CLI signal handler is the only mechanism that can snapshot
+statistics mid-solve; the answer and duration still come from the API
+run.
 
 --benchmarks additionally restricts the selection by name, with the same
 matching rule as update_comparison.py (exact benchmarks/-relative name or
@@ -35,7 +42,8 @@ import csv
 import os
 import subprocess
 import sys
-import time
+
+import update_comparison
 
 FMCAD_DIR = os.path.dirname(os.path.abspath(__file__))
 BENCHMARKS_DIR = os.path.join(FMCAD_DIR, "benchmarks")
@@ -95,35 +103,35 @@ def parse_stats(output):
     return stats
 
 
-def run_one(benchmark, timeout):
-    """Run cvc5 with statistics on one benchmark. Returns (answer,
-    wall seconds, stats dict); answer is sat/unsat/unknown/timeout/error."""
+def binary_stats(benchmark, timeout):
+    """Harvest interrupted-at-timeout statistics by running the cvc5
+    BINARY with --tlimit and the stats flags: its CLI signal handler
+    prints the statistics mid-solve, which the API cannot do for a
+    killed child."""
     cmd = [CVC5_BINARY, os.path.join(BENCHMARKS_DIR, benchmark),
            "--tlimit={}".format(timeout * 1000),
            "--stats", "--stats-all", "--stats-internal"]
-    start = time.time()
-    # hard backstop in case --tlimit fails to fire; generous so cvc5 can
-    # finish printing statistics after the interrupt
+    # generous backstop in case --tlimit fails to fire, so cvc5 can
+    # still finish printing statistics after the interrupt
     try:
         proc = subprocess.run(cmd, capture_output=True,
                               timeout=timeout + 30, cwd=FMCAD_DIR)
+        output = (proc.stdout + proc.stderr).decode("utf-8")
     except subprocess.TimeoutExpired as exc:
         output = ((exc.stdout or b"") + (exc.stderr or b"")).decode("utf-8")
-        return "timeout", time.time() - start, parse_stats(output)
-    duration = time.time() - start
-    output = (proc.stdout + proc.stderr).decode("utf-8")
+    return parse_stats(output)
 
-    if "interrupted by timeout" in output:
-        answer = "timeout"
-    else:
-        answer = "unknown"
-        for line in output.splitlines():
-            if line.strip() in ("sat", "unsat", "unknown"):
-                answer = line.strip()
-                break
-        if proc.returncode != 0:
-            answer = "error"
-    return answer, duration, parse_stats(output)
+
+def run_one(benchmark, timeout):
+    """Run cvc5 with statistics on one benchmark through the python API
+    (see module docstring). Returns (answer, wall seconds, stats dict);
+    answer is sat/unsat/unknown/timeout/error. Runs killed at the wall
+    timeout get their statistics from a binary rerun."""
+    answer, duration, stats = update_comparison.solve_cvc5_api(
+        os.path.join(BENCHMARKS_DIR, benchmark), timeout)
+    if not stats or set(stats) == {"error"}:
+        stats = binary_stats(benchmark, timeout)
+    return answer, duration, stats
 
 
 def main():

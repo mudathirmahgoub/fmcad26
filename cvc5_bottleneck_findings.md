@@ -13,6 +13,15 @@ code-cited in `liastar_stats_reference.md`. Every number below was
 recomputed independently from the csvs during an adversarial verification
 pass. All 26 timeouts reproduced as timeouts and all 284 sats as sat.
 
+2026-07-27 addendum: the collection was redone through the cvc5 python
+API (bindings loaded once, fork per benchmark -- see cvc5_stats.py and
+update_comparison.py), eliminating the ~40ms binary+dylib load per
+invocation. Results and every diagnosis below reproduced exactly: same
+284/199/26 comparison results (zero flips), same 151/128/4/1 sat-path
+split, same 23/3 timeout split; median sat wall time dropped 41ms ->
+15ms while median internal solve time stayed 14ms, confirming the load
+overhead affected recorded wall durations only, not outcomes.
+
 ## The timeout benchmarks: two failure modes
 
 **Mode 1 — died inside the first DNF conversion (23 of 26).** These spend
