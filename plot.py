@@ -88,22 +88,41 @@ def scatter_plot(source_file, output, x_solver, y_solver, color, marker, timeout
     # === Load CSV ===
     df = pd.read_csv(source_file)
 
-    # Per-instance times; unsolved instances (timeout/unknown) are placed at
-    # the timeout value so they appear on the plot boundary.
+    lims = (5e-3, timeout * 2)
+    edge = lims[1]  # the axis boundary -- the line that closes the box
+
+    # Per-instance times: solved instances keep their duration (capped at
+    # the timeout), timeouts sit ON the timeout line, and unknowns sit on
+    # the box edge, so the two unsolved outcomes are visually distinct.
+    # Solved times never exceed the timeout, so the band between the
+    # timeout line and the box edge stays empty except for those markers.
+    def results(prefix):
+        return df[f"{prefix} result"].astype(str).str.strip().str.lower()
+
     def times(prefix):
-        result = df[f"{prefix} result"].astype(str).str.strip().str.lower()
+        result = results(prefix)
         duration = pd.to_numeric(df[f"{prefix} duration"], errors="coerce")
-        return duration.where(result.isin(["sat", "unsat"]), timeout).clip(upper=timeout)
+        solved = duration.where(result.isin(["sat", "unsat"]), timeout)
+        return solved.clip(upper=timeout).mask(result == "unknown", edge)
+
+    x, y = times(x_prefix), times(y_prefix)
+    unknown = (results(x_prefix) == "unknown") | (results(y_prefix) == "unknown")
 
     # === Plot ===
     plt.figure(figsize=(8, 8))
     ax = plt.gca()
 
-    ax.scatter(times(x_prefix), times(y_prefix), color=color, marker=marker,
+    ax.scatter(x[~unknown], y[~unknown], color=color, marker=marker,
                s=25, alpha=0.7, edgecolors="black", linewidths=0.4)
+    # Instances with an unknown result, drawn as their own scatter (same
+    # shape as the rest for now -- change this call's marker to e.g. "x"
+    # to make them distinct). clip_on lets the markers sit fully visible
+    # on the box edge.
+    ax.scatter(x[unknown], y[unknown], color=color, marker=marker,
+               s=25, alpha=0.7, edgecolors="black", linewidths=0.4,
+               clip_on=False, zorder=3)
 
-    # Diagonal and timeout boundaries
-    lims = (5e-3, timeout * 2)
+    # Diagonal, the timeout lines and the unknown (box edge) lines
     ax.plot(lims, lims, color="gray", linestyle="--", linewidth=1, zorder=0)
     ax.axvline(timeout, color="gray", linestyle=":", linewidth=1, zorder=0)
     ax.axhline(timeout, color="gray", linestyle=":", linewidth=1, zorder=0)
@@ -113,6 +132,28 @@ def scatter_plot(source_file, output, x_solver, y_solver, color, marker, timeout
     ax.set_xlim(lims)
     ax.set_ylim(lims)
     ax.set_aspect("equal")
+
+    # The timeout line and the box edge (unknown) are labeled on the
+    # axes as tick labels, like the numbers. The numeric decade ticks
+    # stop below the timeout (which sits at 10^2) so labels never
+    # collide; the two word ticks on x are rotated to clear each other.
+    decades = [10.0 ** k
+               for k in range(int(np.ceil(np.log10(lims[0]))),
+                              int(np.floor(np.log10(timeout))) + 1)]
+    while decades and decades[-1] >= timeout:
+        decades.pop()
+    ticks = decades + [timeout, edge]
+    from matplotlib.ticker import LogFormatterMathtext
+    log_format = LogFormatterMathtext()
+    labels = [log_format(d) for d in decades] \
+        + ["timeout {}".format(log_format(timeout)), "unknown"]
+    ax.set_xticks(ticks)
+    ax.set_xticklabels(labels)
+    ax.set_yticks(ticks)
+    ax.set_yticklabels(labels)
+    for label in ax.get_xticklabels()[-2:]:
+        label.set_rotation(45)
+        label.set_ha("right")
 
     ax.set_xlabel(f"{x_label} time (s)", fontsize=18)
     ax.set_ylabel(f"{y_label} time (s)", fontsize=18)
