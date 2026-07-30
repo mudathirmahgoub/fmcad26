@@ -20,6 +20,7 @@ import sys
 # (comparison.csv result-column header, LaTeX row label), in table order
 ROWS = [
     ("cvc5 result",               "\\cvc"),
+    ("cvc5_nonneg result",        "\\cvc{} (assume-nonneg)"),
     ("sqlsolver result",          "\\sqlSolver"),
     ("modified_sqlsolver result", "Modified \\sqlSolver"),
     ("unfold5 result",            "\\slsReachability (unfold-5)"),
@@ -38,7 +39,9 @@ def latex_table(csv_path):
     for column, label in ROWS:
         counts = {}
         for row in rows:
-            result = row[column].strip()
+            result = (row.get(column) or "").strip()
+            if not result:  # configuration not run yet
+                continue
             counts[result] = counts.get(result, 0) + 1
         unaccounted = {r: n for r, n in counts.items()
                        if r not in ("sat", "unsat", "timeout", "unknown")}

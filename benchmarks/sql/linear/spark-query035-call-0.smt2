@@ -15,5 +15,5 @@
 (declare-const u2 Int)
 (declare-const u4 Int)
 (declare-const sumFresh0 Int)
-(assert (and (not (= u0 u1)) (and (and (= u0 (+ var3 var7)) (= u1 (+ var4 var8))) (and (or (and (= var3 0) (= var4 0)) (and (int.star-contains (lambda ((u4 Int) (u8 Int) (u7 Int) ) (and (= u4 u7) (= u8 u7))) var3 var4 sumFresh0 ) (= u2 (ite (= (ite (not (= var5 100)) (ite (= var6 2) (+ 1 1) 1) (ite (= var6 2) 1 0)) 0) 0 1)))) (or (and (= var7 0) (= var8 0)) (and (int.star-contains (lambda ((u4 Int) (u8 Int) ) (and (= u4 0) (= u8 0))) var7 var8 ) (not (= u2 (ite (= (ite (not (= var9 100)) (ite (= var10 2) (+ 1 1) 1) (ite (= var10 2) 1 0)) 0) 0 1)))))))))
+(assert (and (not (= u0 u1)) (and (and (= u0 (+ var3 var7)) (= u1 (+ var4 var8))) (and (or (and (= var3 0) (= var4 0)) (and (int.star-contains (lambda ((u4 Int) (u8 Int) (u7 Int)) (and (>= u4 0) (>= u8 0) (>= u7 0) (= u4 u7) (= u8 u7))) var3 var4 sumFresh0) (= u2 (ite (= (ite (not (= var5 100)) (ite (= var6 2) (+ 1 1) 1) (ite (= var6 2) 1 0)) 0) 0 1)))) (or (and (= var7 0) (= var8 0)) (and (int.star-contains (lambda ((u4 Int) (u8 Int)) (and (>= u4 0) (>= u8 0) (= u4 0) (= u8 0))) var7 var8) (not (= u2 (ite (= (ite (not (= var9 100)) (ite (= var10 2) (+ 1 1) 1) (ite (= var10 2) 1 0)) 0) 0 1)))))))))
 (check-sat)

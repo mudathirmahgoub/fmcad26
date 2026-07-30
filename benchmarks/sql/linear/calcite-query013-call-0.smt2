@@ -7,5 +7,5 @@
 (declare-const u3 Int)
 (declare-const u4 Int)
 (declare-const sumFresh0 Int)
-(assert (and (not (= (ite (= (ite (and (and (and (= (ite (= u4 0) 0 1) 0) (= u2 4)) (= u3 5)) (= 5 u1)) u0 0) 0) 0 1) (ite (and (= u3 5) (and (and (and (= (ite (= u4 0) 0 1) 0) (= u2 4)) (= 5 u1)) (not (= u0 0)))) 1 0))) (int.star-contains (lambda ((u6 Int) (u7 Int) ) (= u6 u7)) u0 sumFresh0 )))
+(assert (and (not (= (ite (= (ite (and (and (and (= (ite (= u4 0) 0 1) 0) (= u2 4)) (= u3 5)) (= 5 u1)) u0 0) 0) 0 1) (ite (and (= u3 5) (and (and (and (= (ite (= u4 0) 0 1) 0) (= u2 4)) (= 5 u1)) (not (= u0 0)))) 1 0))) (int.star-contains (lambda ((u6 Int) (u7 Int)) (and (>= u6 0) (>= u7 0) (= u6 u7))) u0 sumFresh0)))
 (check-sat)

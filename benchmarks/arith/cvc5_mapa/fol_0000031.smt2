@@ -5,9 +5,9 @@
 (declare-const u!6 Int)
 (declare-const f!0!2 Int)
 (declare-const UNIVERALSET!1!3 Int)
+(declare-const nonempty_i Int)
 (declare-const t Int)
 (declare-const n Int)
-(declare-const nonempty_i Int)
 (assert (>= u!4 0))
 (assert (>= u!5 0))
 (assert (>= u!6 0))
@@ -25,10 +25,13 @@
      (< (- (+ nonempty_i u!5) n) (- n t))
      (> (- n t) 0))
 ))
-(assert 
-  (int.star-contains 
-    (lambda ((u!4 Int)(u!5 Int)(u!6 Int)(f!0!2 Int)(UNIVERALSET!1!3 Int)) 
-      (and 
+(assert
+  (int.star-contains
+    (lambda ((u!4 Int)(u!5 Int)(u!6 Int)(f!0!2 Int)(UNIVERALSET!1!3 Int))
+      (and
+        (>= u!4 0)
+        (>= u!5 0)
+        (>= u!6 0)
         (= u!4 (ite (> f!0!2 UNIVERALSET!1!3) 1 0))
         (= u!5 UNIVERALSET!1!3)
         (= u!6 f!0!2)

@@ -5,8 +5,8 @@
 (declare-const u!6 Int)
 (declare-const f!0!2 Int)
 (declare-const UNIVERALSET!1!3 Int)
-(declare-const t Int)
 (declare-const top_q Int)
+(declare-const t Int)
 (declare-const n Int)
 (assert (>= u!4 0))
 (assert (>= u!5 0))
@@ -26,10 +26,13 @@
        a!1
        (> (+ n (* 3 t) 1) (* 2 0))))
 ))
-(assert 
-  (int.star-contains 
-    (lambda ((u!4 Int)(u!5 Int)(u!6 Int)(f!0!2 Int)(UNIVERALSET!1!3 Int)) 
-      (and 
+(assert
+  (int.star-contains
+    (lambda ((u!4 Int)(u!5 Int)(u!6 Int)(f!0!2 Int)(UNIVERALSET!1!3 Int))
+      (and
+        (>= u!4 0)
+        (>= u!5 0)
+        (>= u!6 0)
         (= u!4 (ite (> f!0!2 UNIVERALSET!1!3) 1 0))
         (= u!5 (ite (> UNIVERALSET!1!3 0) 1 0))
         (= u!6 (ite (> f!0!2 0) 1 0))

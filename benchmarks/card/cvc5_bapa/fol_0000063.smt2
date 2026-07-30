@@ -18,10 +18,14 @@
 (assert (and (let ((a!1 (not (>= (* 2 u!7) (+ (- n t) 1)))))
   (and (= u!4 0) (= u!5 n) (> n 0) (> n (* 3 t)) (<= u!6 t) a!1))
 ))
-(assert 
-  (int.star-contains 
-    (lambda ((u!4 Int)(u!5 Int)(u!6 Int)(u!7 Int)(f!0!2 Int)(UNIVERALSET!1!3 Int)) 
-      (and 
+(assert
+  (int.star-contains
+    (lambda ((u!4 Int)(u!5 Int)(u!6 Int)(u!7 Int)(f!0!2 Int)(UNIVERALSET!1!3 Int))
+      (and
+        (>= u!4 0)
+        (>= u!5 0)
+        (>= u!6 0)
+        (>= u!7 0)
         (= u!4 (ite (> f!0!2 UNIVERALSET!1!3) 1 0))
         (= u!5 (ite (> UNIVERALSET!1!3 0) 1 0))
         (= u!6 (ite (> f!0!2 0) 1 0))

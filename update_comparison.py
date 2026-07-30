@@ -28,7 +28,7 @@ row per file, in three sections:
     bags (mapa):  benchmarks/arith/cvc5_mapa + benchmarks/card/cvc5_mapa (240)
     sql:          benchmarks/sql/linear                                   (29)
 
-Each section runs in six configurations, one per column triple of
+Each section runs in seven configurations, one per column triple of
 comparison.csv:
 
     unfold0 / unfold5 / no_interp  (the SLS solver)
@@ -42,10 +42,12 @@ comparison.csv:
         --mapa selecting the bags interpretation. The sql section has no
         native form, so there SLS goes through the smt_to_sls.py
         translator on the benchmarks/ files.
-    cvc5
+    cvc5 / cvc5_nonneg
         the liastar cvc5 build, through its python API (see the
         "Running cvc5 through its python API" comment below); always
-        sequential, one forked child per benchmark
+        sequential, one forked child per benchmark. cvc5_nonneg enables
+        --arith-liastar-assume-nonnegative (the legacy solver-assumed
+        nonnegativity) for A/B comparison against the default
     sqlsolver / modified_sqlsolver
         the SQLSolver pipeline, via its SmtBenchmarksMain runner
         (gradle task :superopt:smtBenchmarks), which reads ../benchmarks
@@ -107,6 +109,9 @@ Usage
     python3 update_comparison.py --benchmarks fol_0000113.smt2,fol_0000117.smt2
                                                 # a list; bare names match in
                                                 # every directory and section
+    python3 update_comparison.py -j 1 --configs cvc5,cvc5_nonneg --resume
+                                                # continue a crashed run from
+                                                # its last finished benchmark
 
 --benchmarks restricts every selected configuration to the named
 benchmarks. Names are relative to benchmarks/ (as in comparison.csv), or
@@ -165,8 +170,12 @@ CONFIGS = [
     Config("no_interp",          ["--no-interp"], column=9),
     Config("sqlsolver",          [],              column=12),
     Config("modified_sqlsolver", [],              column=15),
+    # cvc5 with the legacy solver-assumed nonnegativity, for A/B
+    # comparison against the default user-constrained semantics
+    Config("cvc5_nonneg", ["arith-liastar-assume-nonnegative"], column=18),
 ]
 SQLSOLVER_FLAVORS = ("sqlsolver", "modified_sqlsolver")
+CVC5_CONFIGS = ("cvc5", "cvc5_nonneg")
 
 HEADER = [
     "unfold0 file", "unfold0 result", "unfold0 duration",
@@ -176,6 +185,7 @@ HEADER = [
     "sqlsolver filename", "sqlsolver result", "sqlsolver duration",
     "modified_sqlsolver file", "modified_sqlsolver result",
     "modified_sqlsolver duration",
+    "cvc5_nonneg file", "cvc5_nonneg result", "cvc5_nonneg duration",
 ]
 
 # The SQLSolver pipeline and its modification commit (see the docstring)
@@ -327,11 +337,12 @@ def solve_sls(benchmark, timeout, solver_args):
 _CVC5_FORK = None  # multiprocessing fork context, created on first use
 
 
-def _cvc5_child(path, timeout_ms, conn):
+def _cvc5_child(path, timeout_ms, conn, options=()):
     """Forked per-benchmark worker: parse the file, execute its
     commands -- intercepting (check-sat) -- and send (answer, duration,
-    {statistic: value}) over the pipe. Statistic values are rendered in
-    the format the cvc5 binary prints (times in bare ms, histograms as
+    {statistic: value}) over the pipe. `options` names boolean cvc5
+    options to enable. Statistic values are rendered in the format the
+    cvc5 binary prints (times in bare ms, histograms as
     '{ A: 1, B: 2 }')."""
     import cvc5
     start = time.time()
@@ -339,6 +350,8 @@ def _cvc5_child(path, timeout_ms, conn):
         tm = cvc5.TermManager()
         solver = cvc5.Solver(tm)
         solver.setOption("tlimit", str(timeout_ms))
+        for option in options:
+            solver.setOption(option, "true")
         parser = cvc5.InputParser(solver)
         parser.setFileInput(cvc5.InputLanguage.SMT_LIB_2_6, path)
         symbols = parser.getSymbolManager()
@@ -379,7 +392,7 @@ def _cvc5_child(path, timeout_ms, conn):
         os._exit(0)
 
 
-def solve_cvc5_api(path, timeout):
+def solve_cvc5_api(path, timeout, options=()):
     """Run one smt2 file through the cvc5 python API in a forked child.
     Returns (answer, duration, stats); a child still running when the
     wall budget expires is killed and reported as ('timeout', timeout,
@@ -391,7 +404,7 @@ def solve_cvc5_api(path, timeout):
         _CVC5_FORK = multiprocessing.get_context("fork")
     receiver, sender = _CVC5_FORK.Pipe(False)
     child = _CVC5_FORK.Process(target=_cvc5_child,
-                               args=(path, timeout * 1000, sender),
+                               args=(path, timeout * 1000, sender, options),
                                daemon=True)
     child.start()
     sender.close()
@@ -406,45 +419,80 @@ def solve_cvc5_api(path, timeout):
 
 def solve_cvc5(benchmark, timeout, solver_args):
     """Run cvc5 on a single benchmark via the python API (see the
-    comment above). Returns (benchmark, result, duration)."""
+    comment above); solver_args names boolean cvc5 options to enable
+    (e.g. arith-liastar-assume-nonnegative for the cvc5_nonneg
+    configuration). Returns (benchmark, result, duration)."""
     answer, duration, _ = solve_cvc5_api(
-        os.path.join(BENCHMARKS_DIR, benchmark), timeout)
+        os.path.join(BENCHMARKS_DIR, benchmark), timeout, solver_args)
     return benchmark, answer, duration
 
 
 def run_configuration(name, benchmarks, solver, timeout, solver_args, jobs,
-                      out_dir, order=None, merge=False):
+                      out_dir, order=None, merge=False, resume=False):
     """Run the given benchmarks of one configuration through `solver`
     (solve_lia_star, solve_sls or solve_cvc5), then write <name>.csv into
     out_dir -- in `order` (default: the run order), merged into the
     existing csv when `merge` is set (subset runs).
 
+    Every finished benchmark is appended to <name>.csv immediately, so a
+    crashed run loses at most the benchmark in flight. With resume=True,
+    results already recorded in <name>.csv are kept and only the missing
+    benchmarks run.
+
     With jobs == 1 the benchmarks run strictly sequentially, which gives
     the most accurate timings; otherwise a thread pool supervises `jobs`
     solver subprocesses at a time (threads suffice: each one just blocks
     in subprocess.run, releasing the GIL)."""
+    os.makedirs(out_dir, exist_ok=True)
+    csv_path = os.path.join(out_dir, name + ".csv")
+    prior = {}
+    if resume and os.path.exists(csv_path):
+        prior = {b: r for b, r in parse_results(csv_path).items()
+                 if b in set(benchmarks)}
+    to_run = [b for b in benchmarks if b not in prior]
+    if prior:
+        print("\n=== {}: resume: {} of {} benchmarks already done ==="
+              .format(name, len(benchmarks) - len(to_run), len(benchmarks)),
+              flush=True)
+    if not to_run:
+        write_run_file(name, order or benchmarks, prior, out_dir, merge)
+        return
     print("\n=== {}: {} benchmarks, {}, timeout {}s ===".format(
-        name, len(benchmarks),
+        name, len(to_run),
         "sequential" if jobs == 1 else "{} parallel jobs".format(jobs),
         timeout), flush=True)
 
-    results = {}
+    results = dict(prior)
+    # crash safety: append each result as it arrives; the file is
+    # rewritten in canonical order at the end. Fresh full runs truncate;
+    # resumed or subset (merge) runs append to what is already there.
+    fresh = not os.path.exists(csv_path) or (not resume and not merge)
+    stream = open(csv_path, "w" if fresh else "a", newline="")
+    stream_writer = csv.writer(stream)
+    if fresh:
+        stream_writer.writerow(["filename", "result", "duration"])
+        stream.flush()
 
     def record(outcome, done):
         benchmark, result, duration = outcome
         results[benchmark] = (result, duration)
+        stream_writer.writerow([benchmark, result, duration])
+        stream.flush()
         print("  [{}/{}] {} : {} : {:.2f}s".format(
-            done, len(benchmarks), benchmark, result, duration), flush=True)
+            done, len(to_run), benchmark, result, duration), flush=True)
 
-    if jobs == 1:
-        for done, benchmark in enumerate(benchmarks, 1):
-            record(solver(benchmark, timeout, solver_args), done)
-    else:
-        with ThreadPoolExecutor(max_workers=jobs) as pool:
-            futures = [pool.submit(solver, b, timeout, solver_args)
-                       for b in benchmarks]
-            for done, future in enumerate(as_completed(futures), 1):
-                record(future.result(), done)
+    try:
+        if jobs == 1:
+            for done, benchmark in enumerate(to_run, 1):
+                record(solver(benchmark, timeout, solver_args), done)
+        else:
+            with ThreadPoolExecutor(max_workers=jobs) as pool:
+                futures = [pool.submit(solver, b, timeout, solver_args)
+                           for b in to_run]
+                for done, future in enumerate(as_completed(futures), 1):
+                    record(future.result(), done)
+    finally:
+        stream.close()
 
     write_run_file(name, order or benchmarks, results, out_dir, merge)
 
@@ -503,18 +551,39 @@ def set_pipeline_modified(modified):
 
 
 def run_sqlsolver_pipeline(config_name, prefix, name, out_dir, timeout,
-                           jobs, files=None):
+                           jobs, files=None, resume=False):
     """Run the SQLSolver pipeline ('sqlsolver' = modification commit
     reverted, 'modified_sqlsolver' = HEAD) on one section's benchmarks --
     all of them, or only `files` (names relative to benchmarks/) -- and
     write <name>.csv into out_dir (merged into the existing csv on subset
     runs).
 
+    With resume=True, benchmarks already recorded in out_dir/<name>.csv
+    are excluded via the runner's --files argument (resume granularity is
+    that csv: progress inside a crashed gradle invocation is not
+    recovered).
+
     Unlike the other runners this is one gradle invocation: the
     SmtBenchmarksMain runner (task :superopt:smtBenchmarks) recompiles the
     pipeline, runs the section's suite with the given per-benchmark
     timeout on `jobs` parallel workers, and writes
     filename,result,duration rows to a csv in the SQLSolver root."""
+    section = next(s for s in SECTIONS if s.prefix == prefix)
+    if resume:
+        csv_path = os.path.join(out_dir, name + ".csv")
+        if os.path.exists(csv_path):
+            prior = parse_results(csv_path)
+            expected = files if files else section.benchmarks
+            missing = [b for b in expected if b not in prior]
+            if not missing:
+                print("\n=== {}: resume: complete, skipping ==="
+                      .format(name), flush=True)
+                return
+            if len(missing) < len(expected):
+                print("\n=== {}: resume: {} of {} benchmarks remain ==="
+                      .format(name, len(missing), len(expected)),
+                      flush=True)
+                files = missing
     check_sqlsolver_clean()
     test_csv = SQLSOLVER_OUTPUTS[prefix]
     bench_args = "{} --timeout={} --jobs={}".format(prefix, timeout, jobs)
@@ -547,14 +616,13 @@ def run_sqlsolver_pipeline(config_name, prefix, name, out_dir, timeout,
             results[benchmark] = (row["result"].lower(),
                                   float(row["duration"]))
 
-    section = next(s for s in SECTIONS if s.prefix == prefix)
     expected = files if files else section.benchmarks
     missing = [b for b in expected if b not in results]
     if missing:
         print("  WARNING: {} has no result for {} benchmarks (e.g. {})"
               .format(test_csv, len(missing), missing[0]))
     write_run_file(name, section.benchmarks, results, out_dir,
-                   merge=files is not None)
+                   merge=files is not None or resume)
 
 
 # ---------------------------------------------------------------------------
@@ -625,7 +693,10 @@ def build_comparison(path):
 
 
 def read_comparison(path):
-    """Read comparison.csv, constructing it from scratch if missing."""
+    """Read comparison.csv, constructing it from scratch if missing. A
+    file written before a configuration was added (fewer columns, its
+    header a prefix of the current one) is widened in place: the new
+    columns start empty and fill when their configuration runs."""
     if not os.path.exists(path):
         return build_comparison(path)
     with open(path, newline="") as f:
@@ -635,6 +706,12 @@ def read_comparison(path):
         sys.exit("error: {} has {} rows, expected {} -- delete the file "
                  "to rebuild it from scratch".format(
                      path, len(rows), expected))
+    if len(rows[0]) < len(HEADER) and rows[0] == HEADER[:len(rows[0])]:
+        print("widening {} from {} to {} columns (new configurations)"
+              .format(path, len(rows[0]), len(HEADER)))
+        rows[0] = list(HEADER)
+        for row in rows[1:]:
+            row.extend([""] * (len(HEADER) - len(row)))
     return rows
 
 
@@ -669,7 +746,7 @@ def parse_args():
     p.add_argument("timeout", metavar="TIMEOUT", nargs="?", type=int,
                    default=100,
                    help="timeout per benchmark in seconds, applied to all "
-                        "six configurations (default: 100)")
+                        "configurations (default: 100)")
     p.add_argument("-j", "--jobs", type=int, default=None,
                    help="number of benchmarks to run in parallel (default: "
                         "all cpus but two, here {}; 1 -- i.e. sequential "
@@ -697,6 +774,11 @@ def parse_args():
                         "fol_0000113.smt2 matches every directory and "
                         "section); results are merged into the existing "
                         "output csvs (default: all benchmarks)")
+    p.add_argument("--resume", action="store_true",
+                   help="continue an interrupted run: benchmarks already "
+                        "recorded in the output csvs are kept and only "
+                        "the missing ones run (rerun the SAME command "
+                        "with --resume added after a crash)")
     args = p.parse_args()
     args.configs = args.configs.split(",") if args.configs else None
     args.benchmarks = (args.benchmarks.split(",") if args.benchmarks
@@ -748,7 +830,7 @@ def main():
             benchmarks, solver, extra_args = (
                 section.benchmarks, solve_sls, [])
             if (config.name not in SQLSOLVER_FLAVORS
-                    and config.name != "cvc5"
+                    and config.name not in CVC5_CONFIGS
                     and section.prefix != "sql"):
                 benchmarks = SLS_NATIVE_BENCHMARKS
                 solver = solve_lia_star
@@ -763,8 +845,9 @@ def main():
                                            name, args.out_dir,
                                            args.timeout, jobs,
                                            files=(None if selected is None
-                                                  else run_benchmarks))
-                elif config.name == "cvc5":
+                                                  else run_benchmarks),
+                                           resume=args.resume)
+                elif config.name in CVC5_CONFIGS:
                     # always sequential: the API runner forks one child
                     # at a time for accurate timings (see the python
                     # API comment above)
@@ -772,14 +855,16 @@ def main():
                                       args.timeout, config.solver_args,
                                       1, args.out_dir,
                                       order=section.benchmarks,
-                                      merge=selected is not None)
+                                      merge=selected is not None,
+                                      resume=args.resume)
                 else:
                     run_configuration(name, run_benchmarks, solver,
                                       args.timeout,
                                       config.solver_args + extra_args,
                                       jobs, args.out_dir,
                                       order=benchmarks,
-                                      merge=selected is not None)
+                                      merge=selected is not None,
+                                      resume=args.resume)
             set_file_column(section_rows, benchmarks, config.column)
             update_from_results(rows, args.csv, args.out_dir, name,
                                 section_rows, config.column)

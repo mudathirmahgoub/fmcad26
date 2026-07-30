@@ -16,5 +16,5 @@
 (declare-const sumFresh3 Int)
 (declare-const sumFresh4 Int)
 (declare-const sumFresh5 Int)
-(assert (and (not (= (ite (= u2 1) u0 0) (ite (= u2 1) u1 0))) (int.star-contains (lambda ((u14 Int) (u21 Int) (u20 Int) (u15 Int) (u17 Int) (u16 Int) (u19 Int) (u18 Int) ) (and (= u14 (ite (and (and (and (and (and (and (and (< 7 u15) (< 7 u16)) (= u16 u18)) (< 7 u18)) (= u16 u15)) (not (= u17 0))) (not (= u19 0))) (not (= u20 0))) 1 0)) (= u21 (ite (and (and (and (and (and (= u18 u15) (= u16 u18)) (< 7 u16)) (not (= u19 0))) (not (= u17 0))) (not (= u20 0))) 1 0)))) u1 u0 sumFresh0 sumFresh1 sumFresh2 sumFresh3 sumFresh4 sumFresh5 )))
+(assert (and (not (= (ite (= u2 1) u0 0) (ite (= u2 1) u1 0))) (int.star-contains (lambda ((u14 Int) (u21 Int) (u20 Int) (u15 Int) (u17 Int) (u16 Int) (u19 Int) (u18 Int)) (and (>= u14 0) (>= u21 0) (>= u20 0) (>= u15 0) (>= u17 0) (>= u16 0) (>= u19 0) (>= u18 0) (= u14 (ite (and (and (and (and (and (and (and (< 7 u15) (< 7 u16)) (= u16 u18)) (< 7 u18)) (= u16 u15)) (not (= u17 0))) (not (= u19 0))) (not (= u20 0))) 1 0)) (= u21 (ite (and (and (and (and (and (= u18 u15) (= u16 u18)) (< 7 u16)) (not (= u19 0))) (not (= u17 0))) (not (= u20 0))) 1 0)))) u1 u0 sumFresh0 sumFresh1 sumFresh2 sumFresh3 sumFresh4 sumFresh5)))
 (check-sat)

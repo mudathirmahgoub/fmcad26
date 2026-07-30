@@ -5,8 +5,8 @@
 (declare-const u!7 Int)
 (declare-const u!9 Int)
 (declare-const u!10 Int)
-(declare-const c_bz!2!8 Int)
 (declare-const UNIVERALSET!1!4 Int)
+(declare-const c_bz!2!8 Int)
 (declare-const f!0!3 Int)
 (declare-const t Int)
 (declare-const n Int)
@@ -15,8 +15,8 @@
 (assert (>= u!7 0))
 (assert (>= u!9 0))
 (assert (>= u!10 0))
-(assert (>= c_bz!2!8 0))
 (assert (>= UNIVERALSET!1!4 0))
+(assert (>= c_bz!2!8 0))
 (assert (>= f!0!3 0))
 ; A formulas
 (assert (and (let ((a!1 (not (>= (* 2 u!10) (+ (- n t) 1)))))
@@ -29,10 +29,15 @@
        (>= (* 2 u!10) (+ (- n t) 1))
        a!1))
 ))
-(assert 
-  (int.star-contains 
-    (lambda ((u!5 Int)(u!6 Int)(u!7 Int)(u!9 Int)(u!10 Int)(c_bz!2!8 Int)(UNIVERALSET!1!4 Int)(f!0!3 Int)) 
-      (and 
+(assert
+  (int.star-contains
+    (lambda ((u!5 Int)(u!6 Int)(u!7 Int)(u!9 Int)(u!10 Int)(UNIVERALSET!1!4 Int)(c_bz!2!8 Int)(f!0!3 Int))
+      (and
+        (>= u!5 0)
+        (>= u!6 0)
+        (>= u!7 0)
+        (>= u!9 0)
+        (>= u!10 0)
         (= u!5 (ite (> f!0!3 UNIVERALSET!1!4) 1 0))
         (= u!6 (ite (> UNIVERALSET!1!4 0) 1 0))
         (= u!7 (ite (> f!0!3 0) 1 0))
@@ -42,5 +47,5 @@
         (>= UNIVERALSET!1!4 0)
         (>= c_bz!2!8 0)
         ))
-    u!5 u!6 u!7 u!9 u!10 c_bz!2!8 UNIVERALSET!1!4 f!0!3 ))
+    u!5 u!6 u!7 u!9 u!10 UNIVERALSET!1!4 c_bz!2!8 f!0!3 ))
 (check-sat)

@@ -12,5 +12,5 @@
 (declare-const sumFresh1 Int)
 (declare-const sumFresh2 Int)
 (declare-const sumFresh3 Int)
-(assert (and (not (= (ite (= u2 1) u0 0) (ite (= u2 1) u1 0))) (int.star-contains (lambda ((u9 Int) (u14 Int) (u11 Int) (u10 Int) (u13 Int) (u12 Int) ) (and (= u9 (ite (and (and (and (and (= u10 u11) (< 9 u11)) (< 7 u10)) (not (= u12 0))) (not (= u13 0))) 1 0)) (= u14 (ite (and (and (and (and (and (< 7 u10) (< 9 u10)) (= u10 u11)) (< 9 u11)) (not (= u13 0))) (not (= u12 0))) 1 0)))) u0 u1 sumFresh0 sumFresh1 sumFresh2 sumFresh3 )))
+(assert (and (not (= (ite (= u2 1) u0 0) (ite (= u2 1) u1 0))) (int.star-contains (lambda ((u9 Int) (u14 Int) (u11 Int) (u10 Int) (u13 Int) (u12 Int)) (and (>= u9 0) (>= u14 0) (>= u11 0) (>= u10 0) (>= u13 0) (>= u12 0) (= u9 (ite (and (and (and (and (= u10 u11) (< 9 u11)) (< 7 u10)) (not (= u12 0))) (not (= u13 0))) 1 0)) (= u14 (ite (and (and (and (and (and (< 7 u10) (< 9 u10)) (= u10 u11)) (< 9 u11)) (not (= u13 0))) (not (= u12 0))) 1 0)))) u0 u1 sumFresh0 sumFresh1 sumFresh2 sumFresh3)))
 (check-sat)

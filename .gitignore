@@ -3,8 +3,5 @@ sls-reachability/
 SQLSolver/
 cvc5/
 
-# experiment outputs
-output/
-
 __pycache__/
 .DS_Store

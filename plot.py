@@ -11,7 +11,7 @@ def plot(source_file, output):
     df_modified_sql_solver = df[(df["modified_sqlsolver result"].astype(str).str.strip() != "timeout") &
                                    (df["modified_sqlsolver result"].astype(str).str.strip() != "unknown")]
     df_unfold0 = df[df["unfold0 result"].astype(str).str.strip() != "timeout"]
-    df_cvc5_lia = df[df["cvc5 result"].astype(str).str.strip() != "timeout"]    
+    df_cvc5_lia = df[df["cvc5 result"].astype(str).str.strip() != "timeout"]
     df_unfold5 = df[df["unfold5 result"].astype(str).str.strip() != "timeout"]
     df_no_interp = df[df["no_interp result"].astype(str).str.strip() != "timeout"]
 

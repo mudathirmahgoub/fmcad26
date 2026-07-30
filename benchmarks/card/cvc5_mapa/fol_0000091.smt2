@@ -28,10 +28,15 @@
      (>= (* 2 u!10) (+ (- n t) 1))
      (= u!10 0))
 ))
-(assert 
-  (int.star-contains 
-    (lambda ((u!5 Int)(u!6 Int)(u!7 Int)(u!9 Int)(u!10 Int)(UNIVERALSET!1!4 Int)(c_dx!2!8 Int)(f!0!3 Int)) 
-      (and 
+(assert
+  (int.star-contains
+    (lambda ((u!5 Int)(u!6 Int)(u!7 Int)(u!9 Int)(u!10 Int)(UNIVERALSET!1!4 Int)(c_dx!2!8 Int)(f!0!3 Int))
+      (and
+        (>= u!5 0)
+        (>= u!6 0)
+        (>= u!7 0)
+        (>= u!9 0)
+        (>= u!10 0)
         (= u!5 (ite (> f!0!3 UNIVERALSET!1!4) 1 0))
         (= u!6 UNIVERALSET!1!4)
         (= u!7 f!0!3)
