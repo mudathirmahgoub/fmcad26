@@ -1,3 +1,11 @@
+# Running the binaries
+
+```bash
+chmod +x bin/cvc5-static-mac-arm64
+bin/cvc5-static-mac-arm64 benchmarks/sql/linear/calcite-query013-call-0.smt2 
+bin/cvc5-static-mac-x86_64 benchmarks/sql/linear/calcite-query013-call-0.smt2
+```
+
 # fmcad — LIA* experiments
 
 Reproducible setup for the paper's solver comparison. One command
