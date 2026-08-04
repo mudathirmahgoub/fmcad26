@@ -8,8 +8,10 @@ renders the paper plots from it.
     python3 run.py --only sql       # any update_comparison.py options pass through
 
 Works on Linux, macOS and Windows (see setup.py for the Windows notes). A
-full fresh run takes 1-2 hours of experiments on top of the one-time cvc5
-build (~30-60 minutes).
+full fresh run takes about 12-13 hours of experiments on top of the
+one-time cvc5 build (~30-60 minutes): benchmarks run sequentially by
+default for accurate timings. Pass -j N to run benchmarks in parallel --
+1-2 hours on a many-core machine, at some cost in timing accuracy.
 """
 
 import os

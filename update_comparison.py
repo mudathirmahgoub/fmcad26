@@ -88,21 +88,24 @@ Results are lowercase throughout (sat / unsat / unknown / timeout / error).
 
 Concurrency
 -----------
-Benchmarks of the sets/bags sections run in parallel (all CPUs but two by
-default); the fast sql section runs sequentially for accurate timings; -j
-overrides both. The worker pool uses threads, not processes, deliberately:
-each job only spawns and waits on a solver subprocess, which releases the
-GIL, so threads already provide full parallelism. The SQLSolver runner
-parallelizes internally the same way and receives this script's TIMEOUT
-and job count (sequential for the sql section), so all six
-configurations share the same timeout and parallelism settings.
+All sections run sequentially by default (-j 1): many benchmarks are
+solved within a second, and CPU contention from parallel jobs measurably
+inflates such short durations. Expect ~12-13 hours for the full run
+(the per-benchmark times in the committed logs sum to ~12.7 h); -j N
+trades timing fidelity for wall-clock. The worker pool uses threads, not
+processes, deliberately: each job only spawns and waits on a solver
+subprocess, which releases the GIL, so threads already provide full
+parallelism. The SQLSolver runner parallelizes internally the same way
+and receives this script's TIMEOUT and job count, so all configurations
+share the same timeout and parallelism settings.
 
 Usage
 -----
     python3 run.py                                    # setup + everything + plots
     python3 update_comparison.py --only sets    # one section
     python3 update_comparison.py --configs cvc5,sqlsolver   # some configs
-    python3 update_comparison.py -j 8           # limit parallelism
+    python3 update_comparison.py -j 8           # 8 parallel jobs (default:
+                                                # sequential)
     python3 update_comparison.py --parse-only   # just re-read result csvs
     python3 update_comparison.py --benchmarks card/cvc5_bapa/fol_0000113.smt2
                                                 # a single benchmark
@@ -748,9 +751,9 @@ def parse_args():
                    help="timeout per benchmark in seconds, applied to all "
                         "configurations (default: 100)")
     p.add_argument("-j", "--jobs", type=int, default=None,
-                   help="number of benchmarks to run in parallel (default: "
-                        "all cpus but two, here {}; 1 -- i.e. sequential "
-                        "-- for the fast sql section)".format(DEFAULT_JOBS))
+                   help="number of benchmarks to run in parallel (default: 1, "
+                        "i.e. sequential, for accurate timings; e.g. -j {} "
+                        "uses all cpus but two)".format(DEFAULT_JOBS))
     p.add_argument("--csv", default=DEFAULT_CSV,
                    help="comparison.csv to update, constructed from "
                         "scratch if missing (default: ./comparison.csv)")
@@ -806,8 +809,7 @@ def main():
             continue
         section_rows = rows[1 + section.row:
                             1 + section.row + len(section.benchmarks)]
-        jobs = args.jobs or (1 if section.prefix == "sql"
-                             else DEFAULT_JOBS)
+        jobs = args.jobs or 1
 
         # --benchmarks: indices of the selected benchmarks within the
         # section; the same indices select the corresponding native SLS
