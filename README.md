@@ -17,9 +17,10 @@ Expected output: the first command prints `unsat`, the second prints
 `sat`; both finish in well under a second.
 
 The binaries in `bin/` are static builds of cvc5 `main` `967404925f`
-with Normaliz (`1.4.3.dev+main@967404925f-modified`), the commit the
-results in this repository were produced with; `python3 run.py` builds
-the current `main` of [github.com/cvc5/cvc5](https://github.com/cvc5/cvc5).
+with Normaliz (`1.4.3.dev+main@967404925f-modified`), the commit of
+[github.com/cvc5/cvc5](https://github.com/cvc5/cvc5) that the committed
+results were produced with and that `python3 run.py` builds (pinned as
+`CVC5_COMMIT` in `setup.py`).
 cvc5's own nightly builds leave out Normaliz, which the LIA\* solver
 needs. `-modified` refers only to build-system patches for
 cross-compiling; [bin/build/](bin/build/README.md) has them and the
@@ -194,7 +195,7 @@ fmcad/
 │   └── sql/linear/       # sql, 29 files        ┘
 ├── sls-reachability/     # cloned: SLS solver (branch cvc5) + .venv
 ├── SQLSolver/            # cloned: SQLSolver pipeline (branch cvc5)
-├── cvc5/                 # cloned: cvc5 (branch main), built from source
+├── cvc5/                 # cloned: cvc5 (main at 967404925f), built from source
 ├── output/               # per-configuration result logs (committed: the
 │                         # paper's runs; rewritten by new runs)
 └── comparison.csv        # the merged result table (committed; rebuilt by runs)
@@ -203,8 +204,10 @@ fmcad/
 Steps, in order:
 
 1. Clone `sls-reachability` (branch `cvc5`), `SQLSolver` (branch `cvc5`)
-   and `cvc5` (branch `main` of
-   [github.com/cvc5/cvc5](https://github.com/cvc5/cvc5)).
+   and `cvc5` ([github.com/cvc5/cvc5](https://github.com/cvc5/cvc5),
+   checked out at `CVC5_COMMIT` = `967404925f` of `main`). To try another
+   cvc5, change `CVC5_COMMIT` in `setup.py`; the next `python3 run.py`
+   checks it out and rebuilds cvc5.
 2. Build cvc5:
    `./configure.sh unrestricted --prefix=build/install --tracing --ninja
    --auto-download --all-bindings --gpl --normaliz`, then `ninja install`
@@ -313,8 +316,9 @@ which is the point of the modification.
 - `error: invalid source release: N` from gradle: your JDK is older than
   the level SQLSolver targets (21) — install JDK 21+ and make it the
   default (`setup.py` checks this up front and refuses to start
-  otherwise). Re-running `python3 run.py` also fast-forwards the existing
-  clones, so upstream fixes arrive automatically.
+  otherwise). Re-running `python3 run.py` also fast-forwards the
+  `sls-reachability` and `SQLSolver` clones, so upstream fixes arrive
+  automatically (cvc5 stays at `CVC5_COMMIT`).
 - gradle "up-to-date" confusion never affects results: the orchestrator
   passes `--rerun-tasks` so tests always execute.
 

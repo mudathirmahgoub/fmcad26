@@ -15,7 +15,7 @@ python3 setup.py looks like:
       benchmarks/           canonical smt2 benchmark set (this repository)
       sls-reachability/     SLS solver clone (branch cvc5) + .venv
       SQLSolver/            SQLSolver pipeline clone (branch cvc5)
-      cvc5/                 cvc5 clone (branch main), built
+      cvc5/                 cvc5 clone (main at setup.CVC5_COMMIT), built
       output/               per-configuration result csvs (created)
       comparison.csv        the maintained result table (created)
 

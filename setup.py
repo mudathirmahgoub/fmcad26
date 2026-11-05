@@ -24,13 +24,20 @@ import sys
 ROOT = os.path.dirname(os.path.abspath(__file__))
 WINDOWS = os.name == "nt"
 
+# cvc5 is pinned to the commit of main that the committed cvc5 results
+# were produced with (main keeps moving); change it to try another cvc5 --
+# setup then checks it out and rebuilds. The other clones follow their
+# branch.
+CVC5_COMMIT = "967404925f557ace252fb1cc14a37c5894c90ec9"
+
+# (directory, branch, url, pinned commit or None)
 REPOSITORIES = [
     ("sls-reachability", "cvc5",
-     "https://github.com/mudathirmahgoub/sls-reachability.git"),
+     "https://github.com/mudathirmahgoub/sls-reachability.git", None),
     ("SQLSolver", "cvc5",
-     "https://github.com/mudathirmahgoub/SQLSolver.git"),
+     "https://github.com/mudathirmahgoub/SQLSolver.git", None),
     ("cvc5", "main",
-     "https://github.com/cvc5/cvc5.git"),
+     "https://github.com/cvc5/cvc5.git", CVC5_COMMIT),
 ]
 
 
@@ -83,23 +90,50 @@ def check_prerequisites():
 
 
 def clone_or_update():
-    """Clone the tool repositories; existing clones are fast-forwarded so
+    """Clone the tool repositories. A pinned clone is checked out at its
+    commit, on a local branch of the branch's name (cvc5 then reports
+    e.g. 1.4.3.dev+main@967404925f); the others are fast-forwarded so
     upstream fixes arrive on re-runs."""
     step("Cloning repositories")
-    for directory, branch, url in REPOSITORIES:
+    for directory, branch, url, commit in REPOSITORIES:
         path = os.path.join(ROOT, directory)
-        if os.path.isdir(path):
+        cloned = os.path.isdir(path)
+        if not cloned:
+            run(["git", "clone", "--branch", branch, url])
+        if commit:
+            present = subprocess.run(
+                ["git", "cat-file", "-e", commit + "^{commit}"],
+                cwd=path, stderr=subprocess.DEVNULL).returncode == 0
+            if not present:
+                run(["git", "fetch", "origin", branch], cwd=path)
+            run(["git", "checkout", "-q", "-B", branch, commit], cwd=path)
+            print("{}: {} at {}".format(directory, branch, commit[:10]))
+        elif cloned:
             result = subprocess.run(["git", "pull", "--ff-only"], cwd=path)
             if result.returncode != 0:
                 print("warning: could not fast-forward {}; leaving it "
                       "as-is".format(directory))
-        else:
-            run(["git", "clone", "--branch", branch, url])
+
+
+def cvc5_build_is_current():
+    """Whether the built cvc5 binary is from the checked-out commit (its
+    version string ends in @<short hash>, plus -modified for a dirty
+    tree)."""
+    if not os.path.exists(cvc5_binary()):
+        return False
+    cvc5_dir = os.path.join(ROOT, "cvc5")
+    short = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                           cwd=cvc5_dir, capture_output=True,
+                           text=True).stdout.strip()
+    version = subprocess.run([cvc5_binary(), "--version"],
+                             capture_output=True, text=True).stdout
+    return bool(short) and re.search(
+        r"@{}(-modified)?\b".format(re.escape(short)), version) is not None
 
 
 def build_cvc5():
-    """Build cvc5 (the main branch; ~30-60 minutes on first run)."""
-    if os.path.exists(cvc5_binary()):
+    """Build cvc5 at CVC5_COMMIT (~30-60 minutes on first run)."""
+    if cvc5_build_is_current():
         step("cvc5 already built ({}) -- skipping".format(
             os.path.relpath(cvc5_binary(), ROOT)))
         return
