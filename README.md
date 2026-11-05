@@ -16,11 +16,33 @@ bin/cvc5-static-mac-arm64 benchmarks/arith/cvc5_bapa/fol_0000001.smt2
 Expected output: the first command prints `unsat`, the second prints
 `sat`; both finish in well under a second.
 
+The binaries in `bin/` are static builds of cvc5 `main` `967404925f`
+with Normaliz (`1.4.3.dev+main@967404925f-modified`), the commit of
+[github.com/cvc5/cvc5](https://github.com/cvc5/cvc5) that the committed
+results were produced with and that `python3 run.py` builds (pinned as
+`CVC5_COMMIT` in `setup.py`).
+cvc5's own nightly builds leave out Normaliz, which the LIA\* solver
+needs. `-modified` refers only to build-system patches for
+cross-compiling; [bin/build/](bin/build/README.md) has them and the
+commands that built every file. The paper used
+`1.3.5.dev+liastar@dcd2c3110` (see "Results: cvc5 `main` vs. the paper"
+below); its binaries are in git commit `964c31d`.
+
+`bin/` also has the same cvc5 for Python 3.9 on macOS 11+ (universal2
+wheel) and for Java on macOS (`cvc5.jar` + `cvc5-osx-universal.jar`):
+
+```bash
+python3 -m pip install bin/cvc5-1.4.3.dev0+967404925f-cp39-cp39-macosx_11_0_universal2.whl
+python3 -c "import cvc5; print(cvc5.Solver(cvc5.TermManager()).getVersion())"
+# b'1.4.3.dev+main@967404925f-modified'
+```
+
 
 # fmcad — LIA* experiments (FMCAD 2026 artifact)
 
-1. **Verify the paper's results from the committed logs** — minutes, no
-   build required (see "Verifying the paper's results" below).
+1. **Check the results from the committed logs** — minutes, no build
+   required (see "Regenerating the table and plots from the committed
+   logs" below).
 2. **Rerun everything from source** — one command downloads all tools,
    builds them, runs every experiment, and produces `comparison.csv`
    plus the paper plots:
@@ -37,7 +59,8 @@ The artifact was tested on:
 
 - **Machine:** MacBook Pro (Mac17,6), Apple M5 Max, 18 cores
   (6 Super + 12 Performance), 64 GB RAM
-- **OS:** macOS 26.5.2 (arm64)
+- **OS:** macOS 26.5.2 (arm64) for the paper's runs; macOS 26.7.2 for
+  the November 2026 cvc5 `main` rerun
 - **Toolchain:** Apple clang 21.0.0, cmake 4.3.2, ninja 1.13.0,
   Python 3.9.6, JDK 26.0.1
 
@@ -58,20 +81,25 @@ saved after every configuration.
 - **Disk:** ~16 GB. Internet access is required for the setup step.
 
 
-## Verifying the paper's results from the committed logs
+## Regenerating the table and plots from the committed logs
 
-The raw logs from the paper's experiment runs are committed, so the
-paper's table and plots can be regenerated without rerunning anything:
+The raw logs are committed, so the table and plots can be regenerated
+without rerunning anything:
 
 - `output/<section>_<config>.csv` — raw per-benchmark logs
   (`filename,result,duration`), one file per benchmark section ×
   configuration.
 - `comparison.csv` — the merged result table built from those logs.
 
+| columns / files | come from |
+|---|---|
+| `cvc5`, `cvc5_nonneg`, `output/*_cvc5*.csv`, `output/cvc5_stats_*.csv` | cvc5 `main` `967404925f` (November 2026 rerun) |
+| `sqlsolver`, `modified_sqlsolver`, `unfold0`, `unfold5`, `no_interp` | the paper's runs (July 2026), unchanged |
+
 From the repository root, with any python3 ≥ 3.9:
 
 ```bash
-python3 latex_table.py    # paper's summary table -> comparison_table.tex (stdlib only)
+python3 latex_table.py    # summary table -> comparison_table.tex (stdlib only)
 python3 -m pip install pandas numpy matplotlib
 python3 plot.py           # cactus_plot.png + the two scatter plots
 ```
@@ -81,6 +109,57 @@ Both take seconds; `latex_table.py` reproduces the committed
 the logs in `output/`, run
 `sls-reachability/.venv/bin/python3 update_comparison.py --parse-only`
 (needs the venv created by setup, see below).
+
+The paper's exact logs (all columns from the paper build) are in
+[Zenodo record 21792576](https://zenodo.org/records/21792576) and in git
+commit `964c31d`:
+
+```bash
+mkdir paper && git show 964c31d:comparison.csv > paper/comparison.csv
+python3 latex_table.py paper/comparison.csv   # the paper's table
+cd paper && python3 ../plot.py                # the paper's plots, in paper/
+```
+
+## Results: cvc5 `main` vs. the paper
+
+The LIA\* solver is now in cvc5 `main`. Rerunning the two cvc5
+configurations with `main` (`1.4.3.dev+main@967404925f`) instead of the
+paper build (`1.3.5.dev+liastar@dcd2c3110`):
+
+| | paper build | cvc5 `main` |
+|---|---|---|
+| `cvc5`: sat / unsat / timeout | 284 / 199 / 26 | 284 / 199 / 26 |
+| `cvc5_nonneg`: sat / unsat / timeout | 284 / 199 / 26 | 284 / 199 / 26 |
+| benchmarks whose answer changed | — | 0 (no sat/unsat flips) |
+| `cvc5` total time, 483 solved benchmarks | 321 s | 266 s (median ratio 0.63) |
+| sat solved by the candidate model alone | 151 / 284 | 149 / 284 |
+| timeouts stuck in the DNF conversion | 23 | 23 |
+| timeouts with 1417 disjuncts | 3 | 3 |
+| ITEs removed per timeout (`itesRemoved`) | 13–47 | 8–20 |
+
+- Every answer is the same, so the summary table is unchanged. Only the
+  durations in the cvc5 columns and the cactus/scatter plots changed.
+- The speedup was measured on the same machine but a newer macOS (see
+  "Test system").
+- Two SQL benchmarks, `calcite-query059-call-0` and
+  `calcite-query222-call-2`, are no longer solved by the candidate model
+  alone; `main` emits reduction lemmas for them.
+- `main` removes fewer ITEs, so the paper's "at least 12 ITE
+  expressions" holds for the paper build's `itesRemoved` (min 13) but
+  not for `main`'s (min 8). The DNF disjunct counts are identical.
+- Borderline: `card/cvc5_mapa/fol_0000049` (sat in 53–72 s) and
+  `card/cvc5_mapa/fol_0000071` (timeout through the python API, but sat
+  in 44 s with the `cvc5` binary). The published `cvc5_stats_*.csv` came
+  from a run in which these two had swapped outcomes.
+
+To reproduce the statistics rows:
+
+```bash
+PY=sls-reachability/.venv/bin/python3   # needs the cvc5 python API
+$PY cvc5_stats.py sat        # -> output/cvc5_stats_sat.csv     (~4 min)
+$PY cvc5_stats.py timeout    # -> output/cvc5_stats_timeout.csv (~1.5 h)
+python3 analyze_cvc5_stats.py output/cvc5_stats_timeout.csv output/cvc5_stats_sat.csv
+```
 
 ## Prerequisites
 
@@ -106,7 +185,8 @@ fmcad/
 ├── update_comparison.py  # experiment orchestrator (see its docstring)
 ├── plot.py               # renders cactus + scatter plots from comparison.csv
 ├── latex_table.py        # renders the paper's summary table from comparison.csv
-├── bin/                  # pre-built static cvc5 binaries (smoke test only)
+├── bin/                  # pre-built cvc5 binaries, wheel, jars (smoke test only)
+│   └── build/            # how they were built
 ├── benchmarks/           # canonical smt2 benchmark set (in this repo)
 │   ├── arith/cvc5_bapa/  # sets, 120 files      ┐ one comparison.csv row
 │   ├── arith/cvc5_mapa/  # bags, 120 files      │ per benchmark file
@@ -115,7 +195,7 @@ fmcad/
 │   └── sql/linear/       # sql, 29 files        ┘
 ├── sls-reachability/     # cloned: SLS solver (branch cvc5) + .venv
 ├── SQLSolver/            # cloned: SQLSolver pipeline (branch cvc5)
-├── cvc5/                 # cloned: cvc5 (branch liastar), built from source
+├── cvc5/                 # cloned: cvc5 (main at 967404925f), built from source
 ├── output/               # per-configuration result logs (committed: the
 │                         # paper's runs; rewritten by new runs)
 └── comparison.csv        # the merged result table (committed; rebuilt by runs)
@@ -124,12 +204,16 @@ fmcad/
 Steps, in order:
 
 1. Clone `sls-reachability` (branch `cvc5`), `SQLSolver` (branch `cvc5`)
-   and `cvc5` (branch `liastar`).
+   and `cvc5` ([github.com/cvc5/cvc5](https://github.com/cvc5/cvc5),
+   checked out at `CVC5_COMMIT` = `967404925f` of `main`). To try another
+   cvc5, change `CVC5_COMMIT` in `setup.py`; the next `python3 run.py`
+   checks it out and rebuilds cvc5.
 2. Build cvc5:
-   `./configure.sh production --prefix=build/install --tracing --ninja
-   --auto-download --all-bindings --normaliz`, then `ninja install` in
-   `cvc5/build`. This also produces the python wheel in
-   `cvc5/build/repaired-wheel/`.
+   `./configure.sh unrestricted --prefix=build/install --tracing --ninja
+   --auto-download --all-bindings --gpl --normaliz`, then `ninja install`
+   in `cvc5/build`. (`unrestricted` is cvc5's former `production` build
+   type; Normaliz is GPL, so `--normaliz` needs `--gpl`.) This also
+   produces the python wheel in `cvc5/build/repaired-wheel/`.
 3. Create `sls-reachability/.venv` and install `z3-solver==5.0.0.0`,
    `pandas`, `numpy`, `matplotlib`, and the cvc5 wheel from step 2.
 4. Copy the cvc5 java bindings produced by the cvc5 build (the jar from
@@ -141,7 +225,7 @@ Steps, in order:
 
 ## The experiments
 
-Three benchmark sections × six configurations = 18 runs; each
+Three benchmark sections × seven configurations = 21 runs; each
 configuration owns one file/result/duration column triple of
 `comparison.csv` (rows correspond across columns by position). Full
 details live in the `update_comparison.py` docstring; the short version:
@@ -149,20 +233,24 @@ details live in the `update_comparison.py` docstring; the short version:
 | configuration | tool and input |
 |---|---|
 | `unfold0`, `unfold5`, `no_interp` | **SLS solver.** Sets/bags: `lia_star_solver.py` on the *native* benchmarks in `sls-reachability/benchmarks/bapa/` (`--mapa` for bags) — running SLS through the smt2 translator was measured to hurt it badly (bapa unfold0: 53 vs 35 timeouts). Sql: `smt_to_sls.py` on `benchmarks/sql/linear/` (no native form exists). |
-| `cvc5` | `cvc5/build/install/bin/cvc5 <file> --tlimit=<ms>` on `benchmarks/` |
+| `cvc5` | cvc5 through its python API (the wheel from setup step 2), one forked child per benchmark, on `benchmarks/` |
+| `cvc5_nonneg` | as `cvc5`, plus `--arith-liastar-assume-nonnegative` (not in the paper) |
 | `sqlsolver` | SQLSolver pipeline, **original** (modification commit reverted during the run — see below) |
-| `modified_sqlsolver` | SQLSolver pipeline, **modified** (clone HEAD) |
+| `modified_sqlsolver` | SQLSolver pipeline, **modified** |
 
 The two SQLSolver flavors run the same benchmark runner
 (`SmtBenchmarksMain`, via the gradle task `:superopt:smtBenchmarks`,
 reading `../benchmarks` relative to the SQLSolver clone — i.e. this
 repository's `benchmarks/`), which receives the orchestrator's timeout
-and job count. The modification
-is commit `e2acacee35...` ("overapproximation unknown"); `sqlsolver`
-reverse-applies its diff before running and restores it afterwards. Both
-flavors abort unless `SQLSolver/superopt/src/main` has no uncommitted
-changes. **Do not edit the SQLSolver clone while a run is in progress.**
-If that commit is ever rebased, update `MODIFICATION_COMMIT` in
+and job count. Both measure `superopt/src` as of SQLSolver commit
+`a3550726cf...` (`PIPELINE_COMMIT`, the paper's run), checked out for the
+run and restored to HEAD afterwards: later commits on the branch rewrite
+the lines the modification touches. The modification is commit
+`e2acacee35...` ("overapproximation unknown"); `sqlsolver` additionally
+reverse-applies its diff. Both flavors abort unless
+`SQLSolver/superopt/src` has no uncommitted changes. **Do not edit the
+SQLSolver clone while a run is in progress.** If either commit is ever
+rebased, update `PIPELINE_COMMIT` / `MODIFICATION_COMMIT` in
 `update_comparison.py`.
 
 Partial runs, e.g.:
@@ -170,6 +258,7 @@ Partial runs, e.g.:
 ```bash
 python3 run.py --only sql                       # one section: sets | bags | sql
 python3 run.py --configs cvc5,modified_sqlsolver
+python3 run.py --configs cvc5,cvc5_nonneg       # cvc5 only (~1.6 h)
 python3 run.py 60 -j 8                          # timeout 60s, 8 parallel jobs
 sls-reachability/.venv/bin/python3 update_comparison.py --parse-only
 ```
@@ -207,11 +296,12 @@ awk -F, 'NR>1 {s=0; u=0; for (i=2; i<=20; i+=3) {if ($i=="sat") s=1; if ($i=="un
                if (s&&u) print "CONTRADICTION: " $1}' comparison.csv
 ```
 
-Known instances (July 2026 runs, present in the committed
-`comparison.csv`): four sets benchmarks — `card/cvc5_bapa/fol_0000055`,
-`fol_0000078`, `fol_0000116` and `fol_0000120` — where the original
-SQLSolver answers `sat` while cvc5 proves `unsat`; the modified pipeline
-returns `unknown` on all four, which is the point of the modification.
+Known instances (present in the committed `comparison.csv`, with both
+the paper build and cvc5 `main`): four sets benchmarks —
+`card/cvc5_bapa/fol_0000055`, `fol_0000078`, `fol_0000116` and
+`fol_0000120` — where the original SQLSolver answers `sat` while cvc5
+proves `unsat`; the modified pipeline returns `unknown` on all four,
+which is the point of the modification.
 
 ## Troubleshooting
 
@@ -226,8 +316,9 @@ returns `unknown` on all four, which is the point of the modification.
 - `error: invalid source release: N` from gradle: your JDK is older than
   the level SQLSolver targets (21) — install JDK 21+ and make it the
   default (`setup.py` checks this up front and refuses to start
-  otherwise). Re-running `python3 run.py` also fast-forwards the existing
-  clones, so upstream fixes arrive automatically.
+  otherwise). Re-running `python3 run.py` also fast-forwards the
+  `sls-reachability` and `SQLSolver` clones, so upstream fixes arrive
+  automatically (cvc5 stays at `CVC5_COMMIT`).
 - gradle "up-to-date" confusion never affects results: the orchestrator
   passes `--rerun-tasks` so tests always execute.
 
@@ -240,7 +331,7 @@ bundled tool keeps its own license (the `cvc5/`, `sls-reachability/` and
 
 | component | license | description |
 |---|---|---|
-| cvc5 | [cvc5/COPYING](cvc5/COPYING) (modified BSD) | the SMT solver evaluated in the paper; covers the `cvc5/` clone and the pre-built binaries in `bin/` |
-| Normaliz | [cvc5/build/deps/src/Normaliz-EP/COPYING](cvc5/build/deps/src/Normaliz-EP/COPYING) (GPL-3.0) | discrete convex geometry library that the cvc5 build downloads and links (`--normaliz`) |
+| cvc5 | [cvc5/COPYING](cvc5/COPYING) (modified BSD) | the SMT solver evaluated in the paper; covers the `cvc5/` sources (copy in [bin/cvc5 license](<bin/cvc5 license>)); its builds with Normaliz are GPL-3.0, see the next row |
+| Normaliz | [cvc5/build/deps/src/Normaliz-EP/COPYING](cvc5/build/deps/src/Normaliz-EP/COPYING) (GPL-3.0) | discrete convex geometry library that the cvc5 build downloads and links (`--normaliz`); because of it the build is configured with `--gpl`, so the cvc5 built by setup and the binaries in `bin/` are GPL-3.0 ([bin/COPYING](bin/COPYING)) |
 | SLS solver | [sls-reachability/LICENSE](sls-reachability/LICENSE) (MIT) | the SLS LIA\* solver behind the `unfold0`/`unfold5`/`no_interp` configurations |
 | SQLSolver | [SQLSolver/LICENSE](SQLSolver/LICENSE) (Apache-2.0) | the SQL equivalence prover behind the `sqlsolver`/`modified_sqlsolver` configurations |
