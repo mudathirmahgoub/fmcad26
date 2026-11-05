@@ -15,7 +15,7 @@ python3 setup.py looks like:
       benchmarks/           canonical smt2 benchmark set (this repository)
       sls-reachability/     SLS solver clone (branch cvc5) + .venv
       SQLSolver/            SQLSolver pipeline clone (branch cvc5)
-      cvc5/                 cvc5 clone (branch liastar), built
+      cvc5/                 cvc5 clone (branch main), built
       output/               per-configuration result csvs (created)
       comparison.csv        the maintained result table (created)
 
@@ -43,7 +43,7 @@ comparison.csv:
         native form, so there SLS goes through the smt_to_sls.py
         translator on the benchmarks/ files.
     cvc5 / cvc5_nonneg
-        the liastar cvc5 build, through its python API (see the
+        the cvc5 build, through its python API (see the
         "Running cvc5 through its python API" comment below); always
         sequential, one forked child per benchmark. cvc5_nonneg enables
         --arith-liastar-assume-nonnegative (the legacy solver-assumed
@@ -61,17 +61,24 @@ position: fol_N under arith/card maps to fol_N in every encoding.
 
 SQLSolver flavors
 -----------------
-The two SQLSolver configurations run the same tests; they differ only in
-the pipeline source. The modification lives in commit
+Both SQLSolver configurations measure superopt/src (the pipeline and the
+SmtBenchmarksMain runner) as of the SQLSolver commit of the published run
+
+    a3550726cfb2253ee74e9789cca9b7d5f868b63c  (PIPELINE_COMMIT)
+
+whatever commit the clone's branch is at: those sources are checked out
+into the working tree for the run and restored to HEAD afterwards. (Later
+commits rewrite the lines the modification below touches, so the
+original flavor can no longer be derived from them.) The two flavors
+differ only in the modification, commit
 
     e2acacee3506fef2372313db2fddf6f6659e57ea  ("overapproximation unknown")
 
-of the SQLSolver clone. modified_sqlsolver runs HEAD as-is; sqlsolver
-reverse-applies that commit's diff to the working tree before running and
-restores it afterwards. Both require superopt/src/main to be free of
-uncommitted changes (the script aborts otherwise), and gradle recompiles
-the pipeline on every flip. Do not edit the SQLSolver clone while a run
-is in progress.
+modified_sqlsolver runs PIPELINE_COMMIT as-is; sqlsolver additionally
+reverse-applies the modification's diff. Both require superopt/src to be
+free of uncommitted changes (the script aborts otherwise), and gradle
+recompiles the pipeline on every flip. Do not edit the SQLSolver clone
+while a run is in progress.
 
 Pipeline
 --------
@@ -191,7 +198,10 @@ HEADER = [
     "cvc5_nonneg file", "cvc5_nonneg result", "cvc5_nonneg duration",
 ]
 
-# The SQLSolver pipeline and its modification commit (see the docstring)
+# The SQLSolver sources both flavors measure, and the modification commit
+# (see the docstring)
+PIPELINE_COMMIT = "a3550726cfb2253ee74e9789cca9b7d5f868b63c"
+PIPELINE_SOURCES = "superopt/src"
 MODIFICATION_COMMIT = "e2acacee3506fef2372313db2fddf6f6659e57ea"
 # Per section: the csv file the SmtBenchmarksMain runner writes into the
 # SQLSolver root (its suite names equal the section prefixes)
@@ -316,7 +326,7 @@ def solve_sls(benchmark, timeout, solver_args):
 # ---------------------------------------------------------------------------
 # Running cvc5 through its python API
 # ---------------------------------------------------------------------------
-# The liastar cvc5 build is used through its python bindings (installed
+# The cvc5 build is used through its python bindings (installed
 # into the sls-reachability virtual environment by the cvc5 build)
 # rather than by spawning the cvc5 binary: loading the binary and its
 # dylibs costs ~40ms per invocation on macOS, which distorts the
@@ -526,37 +536,50 @@ def write_run_file(name, order, results, out_dir, merge=False):
 # ---------------------------------------------------------------------------
 
 def check_sqlsolver_clean():
-    """Both flavors need superopt/src/main clean so the flavor toggle
-    below fully controls which pipeline is measured."""
+    """Both flavors need superopt/src clean so the checkout below fully
+    controls which pipeline is measured (and restoring it loses
+    nothing)."""
     status = subprocess.run(
-        ["git", "status", "--porcelain", "--", "superopt/src/main"],
+        ["git", "status", "--porcelain", "--", PIPELINE_SOURCES],
         cwd=SQLSOLVER_DIR, capture_output=True).stdout.decode().strip()
     if status:
         sys.exit("error: {} has uncommitted changes under "
-                 "superopt/src/main:\n{}\ncommit or stash them first"
-                 .format(SQLSOLVER_DIR, status))
+                 "{}:\n{}\ncommit or stash them first"
+                 .format(SQLSOLVER_DIR, PIPELINE_SOURCES, status))
 
 
-def set_pipeline_modified(modified):
-    """The modified pipeline is HEAD; the original one is HEAD with the
-    modification commit's diff reverse-applied (working tree only)."""
-    if modified:
-        subprocess.run(
-            ["git", "checkout", "HEAD", "--", "superopt/src/main"],
-            cwd=SQLSOLVER_DIR, check=True)
-    else:
+def checkout_pipeline(modified):
+    """Put the measured sources into the working tree: superopt/src of
+    PIPELINE_COMMIT (--no-overlay also removes files added after it),
+    for the original flavor with the modification's diff
+    reverse-applied."""
+    subprocess.run(
+        ["git", "checkout", "--no-overlay", PIPELINE_COMMIT, "--",
+         PIPELINE_SOURCES],
+        cwd=SQLSOLVER_DIR, check=True)
+    if not modified:
         diff = subprocess.run(
             ["git", "diff", MODIFICATION_COMMIT + "^!", "--",
-             "superopt/src/main"],
+             PIPELINE_SOURCES],
             cwd=SQLSOLVER_DIR, check=True, capture_output=True).stdout
         subprocess.run(["git", "apply", "-R"], cwd=SQLSOLVER_DIR,
                        check=True, input=diff)
 
 
+def restore_pipeline():
+    """Return superopt/src to the clone's HEAD (index and working
+    tree)."""
+    subprocess.run(
+        ["git", "checkout", "--no-overlay", "HEAD", "--",
+         PIPELINE_SOURCES],
+        cwd=SQLSOLVER_DIR, check=True)
+
+
 def run_sqlsolver_pipeline(config_name, prefix, name, out_dir, timeout,
                            jobs, files=None, resume=False):
-    """Run the SQLSolver pipeline ('sqlsolver' = modification commit
-    reverted, 'modified_sqlsolver' = HEAD) on one section's benchmarks --
+    """Run the SQLSolver pipeline ('sqlsolver' = PIPELINE_COMMIT with the
+    modification reverted, 'modified_sqlsolver' = PIPELINE_COMMIT) on one
+    section's benchmarks --
     all of them, or only `files` (names relative to benchmarks/) -- and
     write <name>.csv into out_dir (merged into the existing csv on subset
     runs).
@@ -599,13 +622,11 @@ def run_sqlsolver_pipeline(config_name, prefix, name, out_dir, timeout,
     print("\n=== {}: gradle smtBenchmarks {} ===".format(name, bench_args),
           flush=True)
 
-    if config_name == "sqlsolver":
-        set_pipeline_modified(False)
+    checkout_pipeline(config_name == "modified_sqlsolver")
     try:
         subprocess.run(cmd, cwd=SQLSOLVER_DIR, check=True)
     finally:
-        if config_name == "sqlsolver":
-            set_pipeline_modified(True)
+        restore_pipeline()
 
     # the runner lists files relative to the SQLSolver root
     # (../benchmarks/...); comparison.csv uses names relative to

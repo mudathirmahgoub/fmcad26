@@ -8,7 +8,7 @@ Collect cvc5 statistics over benchmarks selected from comparison.csv.
                           [--out FILE]
 
 Selects the benchmarks whose cvc5 result column of comparison.csv matches
-the given result (all = every benchmark), then runs the liastar cvc5
+the given result (all = every benchmark), then runs the cvc5
 build on each one SEQUENTIALLY -- one at a time, for meaningful timers --
 through its python API (update_comparison.solve_cvc5_api: bindings
 loaded once, one forked child per benchmark, statistics collected with

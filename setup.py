@@ -29,8 +29,8 @@ REPOSITORIES = [
      "https://github.com/mudathirmahgoub/sls-reachability.git"),
     ("SQLSolver", "cvc5",
      "https://github.com/mudathirmahgoub/SQLSolver.git"),
-    ("cvc5", "liastar",
-     "https://github.com/mudathirmahgoub/cvc5.git"),
+    ("cvc5", "main",
+     "https://github.com/cvc5/cvc5.git"),
 ]
 
 
@@ -98,7 +98,7 @@ def clone_or_update():
 
 
 def build_cvc5():
-    """Build cvc5 (the liastar branch; ~30-60 minutes on first run)."""
+    """Build cvc5 (the main branch; ~30-60 minutes on first run)."""
     if os.path.exists(cvc5_binary()):
         step("cvc5 already built ({}) -- skipping".format(
             os.path.relpath(cvc5_binary(), ROOT)))
@@ -107,9 +107,11 @@ def build_cvc5():
     cvc5_dir = os.path.join(ROOT, "cvc5")
     # configure.sh is a bash script; invoking it through bash works on
     # every platform (on Windows: the MSYS2 bash)
-    run(["bash", "configure.sh", "production", "--prefix=build/install",
+    # "unrestricted" is cvc5's former "production" build type; Normaliz
+    # is GPL-licensed, so --normaliz also needs --gpl
+    run(["bash", "configure.sh", "unrestricted", "--prefix=build/install",
          "--tracing", "--ninja", "--auto-download", "--all-bindings",
-         "--normaliz"], cwd=cvc5_dir)
+         "--gpl", "--normaliz"], cwd=cvc5_dir)
     run(["ninja", "install"], cwd=os.path.join(cvc5_dir, "build"))
 
 
